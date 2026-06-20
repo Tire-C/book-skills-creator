@@ -160,7 +160,9 @@ This repository includes small helper scripts:
 
 ```bash
 python scripts/preflight.py
+python scripts/inspect_source.py ./books/my-book.pdf
 python scripts/create_pack_scaffold.py my-book-skill-pack
+python scripts/check_pack.py my-book-skill-pack
 ```
 
 The scripts are optional. The main product is the Agent Skill in `SKILL.md`.
