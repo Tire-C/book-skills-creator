@@ -1,11 +1,11 @@
-# Skill map
+# Map
 
-Router:
+Entry:
 - router/SKILL.md
 
-Atomic:
-- atomic/extract-principles/SKILL.md
-- atomic/apply-method/SKILL.md
+Units:
+- atomic/example-a/SKILL.md
+- atomic/example-b/SKILL.md
 
-Combo:
-- combo/principle-to-action/SKILL.md
+Flow:
+- combo/example-workflow/SKILL.md
