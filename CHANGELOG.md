@@ -6,11 +6,31 @@ Public releases follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-06-20
+
+### Added
+
+- Modular skill-pack workflow with atomic skills, combo skills, a router, references, skill
+  maps, rejected candidates, and validation records.
+- Standard-library helpers for source inspection, TXT/Markdown/DOCX extraction, pack
+  scaffolding, and structural validation.
+- Automated tests with synthetic fixtures.
+- Public setup, architecture, source-processing, contribution, security, roadmap, and sample
+  pack documentation.
+
 ### Changed
 
 - Prepared the repository for its first stable public release.
 - Clarified installation, supported formats, limitations, and helper behavior.
 - Expanded the root skill instructions and public documentation.
+- Verified user-level and repository-local installations with the documented helper commands.
+
+### Security
+
+- Kept extraction local and network-free.
+- Restricted processing to explicitly selected sources.
+- Ignored extracted workspaces and excluded private or copyrighted source material from tests
+  and examples.
 
 ## Pre-1.0 milestones
 

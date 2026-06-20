@@ -5,7 +5,6 @@ format coverage.
 
 ## Before v1.0
 
-- Validate installation in at least one user-level and one repository-level skills directory.
 - Publish a tagged GitHub release with concise release notes.
 
 ## After v1.0
