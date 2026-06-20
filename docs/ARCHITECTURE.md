@@ -1,6 +1,7 @@
 # Architecture
 
-Book skill creator is designed as an agent skill plus optional helper scripts.
+Book Skills Creator combines an Agent Skill workflow with deterministic, optional helper
+scripts.
 
 ## Layers
 
@@ -10,11 +11,14 @@ Book skill creator is designed as an agent skill plus optional helper scripts.
 
 ### 2. Extraction layer
 
-The agent may use local tools to convert a selected source into readable text and metadata.
+Local helpers inspect explicitly selected paths and extract TXT, Markdown, and lightweight DOCX
+into a Git-ignored workspace. Other recognized formats require tools supplied by the host
+environment.
 
 ### 3. Planning layer
 
-The agent analyzes the source and proposes a skill-pack architecture before writing generated files.
+The agent analyzes the source and presents the skill-pack architecture before writing generated
+files. The plan includes rejected candidates, extraction gaps, and uncertainties.
 
 ### 4. Generation layer
 
@@ -22,7 +26,8 @@ The agent writes a pack with router, atomic skills, combo skills, references, ma
 
 ### 5. Validation layer
 
-The agent checks consistency, source grounding, naming, overlap, and usability.
+The agent checks structure, source grounding, naming, overlap, routing coverage, and usability.
+`scripts/check_pack.py` provides deterministic structural validation.
 
 ## Pack model
 
@@ -33,4 +38,12 @@ router
   -> references
 ```
 
-The router is the public entry point. Atomic skills do one job. Combo skills chain multiple jobs. References preserve context without overloading the active skill.
+The router is the public entry point. Atomic skills do one job. Combo skills chain multiple
+jobs. References preserve context without overloading the active skill.
+
+## Data boundaries
+
+- Input scope comes only from user-selected paths.
+- Temporary extraction data stays outside generated packs.
+- Generated skills synthesize procedures rather than reproducing source material.
+- No helper requires network access.

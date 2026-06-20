@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-SUPPORTED = {
+RECOGNIZED_EXTENSIONS = {
     '.pdf', '.epub', '.docx', '.txt', '.md', '.markdown',
     '.html', '.htm', '.rtf', '.mobi', '.azw', '.azw3'
 }
@@ -34,12 +34,12 @@ def main() -> None:
             continue
         for item in iter_sources(path):
             ext = item.suffix.lower()
-            if ext in SUPPORTED:
+            if ext in RECOGNIZED_EXTENSIONS:
                 found.append(item)
             else:
                 skipped.append((str(item), 'unsupported'))
 
-    print('SUPPORTED')
+    print('RECOGNIZED')
     for item in found:
         size_kb = item.stat().st_size / 1024
         print(f'- {item} | {item.suffix.lower()} | {size_kb:.1f} KB')

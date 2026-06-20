@@ -1,10 +1,10 @@
 # Source index
 
-Source: example-source.pdf
+Source: synthetic-example-source.txt (not included)
 
-Type: example document
+Type: synthetic structural fixture
 
 Notes:
 
-- This file records where the generated pack came from.
+- No real document content is stored in this repository.
 - Real packs should include title, author, chapters, pages, extraction notes, and uncertainties.

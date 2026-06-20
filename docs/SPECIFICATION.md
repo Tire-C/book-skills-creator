@@ -1,4 +1,4 @@
-# Book skill creator specification
+# Book Skills Creator specification
 
 This document defines the public behavior of the project.
 
@@ -23,6 +23,9 @@ source -> extraction -> analysis -> plan -> map -> atomic skills -> combo skills
 The system processes only the source explicitly selected by the user.
 
 A folder or glob can be processed only when the user explicitly gives that folder or glob as input.
+
+The built-in extraction helper supports TXT, Markdown, and lightweight DOCX. Inspection may
+recognize additional formats, but recognition does not imply built-in extraction support.
 
 ## Skill types
 
@@ -89,4 +92,5 @@ pack-name/
 - References point back to the selected source.
 - Claims unsupported by the source are removed or marked uncertain.
 - Names are lowercase and hyphenated.
+- The skill map records rejected candidates and material uncertainties.
 - The final pack is useful in real tasks.

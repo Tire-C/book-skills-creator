@@ -1,116 +1,114 @@
+<h1 align="center">Book Skills Creator</h1>
+
 <p align="center">
-  <h1 align="center">Book Skills Creator</h1>
+  <strong>Turn a selected book or document into a modular Agent Skill pack—not one oversized skill.</strong>
 </p>
 
 <p align="center">
-  <strong>Convert selected books into structured Agent Skill packs: atomic skills, combo skills, router skills, references, and validation workflows.</strong>
+  <img src="https://img.shields.io/badge/Agent%20Skills-open%20standard-blueviolet" alt="Agent Skills open standard">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-blue" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/dependencies-standard%20library-green" alt="Python standard library">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License">
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Agent%20Skills-Open%20Standard-blueviolet" alt="Agent Skills">
-  <img src="https://img.shields.io/badge/Skill%20Pack-Generator-green" alt="Skill Pack Generator">
-  <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License">
-</p>
-
----
-
-## What is Book Skills Creator?
-
-**Book Skills Creator** is an Agent Skill that turns a selected book or document into a complete, reusable **skill pack**.
-
-Instead of producing one giant summary or one overloaded skill, it analyzes the source, plans the architecture, and generates only the useful operational skills the book can actually support.
-
-A single book can become:
-
-- **atomic skills** — focused skills that do one practical job well;
-- **combo skills** — orchestrated workflows that combine multiple atomic skills;
-- **a router skill** — the entry point that chooses the right skill for the user's task;
-- **references** — chapter notes, concepts, examples, anti-patterns, and source indexes;
-- **validation files** — quality checks to keep the generated pack usable and grounded.
-
----
-
-## Why?
-
-Books are dense. Agents can read them, but raw reading is slow, repetitive, and easy to misuse.
-
-Book Skills Creator converts a book into a practical operating system for that book:
+Book Skills Creator is an agent-neutral workflow for converting explicitly selected source
+material into a structured, source-grounded skill pack:
 
 ```text
-book -> analysis -> plan -> skill map -> atomic skills -> combo skills -> router -> validation
+selected source -> extraction -> analysis -> planning -> skill map
+                -> atomic skills -> combo skills -> router -> validation
 ```
 
-The result is not a book report. It is a set of tools the agent can reuse while solving real problems.
+The generated pack separates focused capabilities from multi-step workflows and routes each
+request to the smallest useful unit. References preserve source context without overloading
+every skill.
 
----
+## Why a skill pack?
 
-## How it differs from simple book-to-skill conversion
-
-Many book-to-skill workflows convert a document into one unified skill.
-
-Book Skills Creator goes further:
-
-| Standard conversion | Book Skills Creator |
+| Single-skill conversion | Book Skills Creator |
 |---|---|
-| One book becomes one skill | One book becomes a skill pack |
-| Summarizes or indexes the book | Extracts operational capabilities |
-| Loads one master skill | Uses router + atomic + combo skills |
-| Good for study/reference | Good for applying the book in workflows |
-| Usually linear | Planned, modular, and validated |
+| One document becomes one large skill | One document becomes a modular skill pack |
+| Reference and procedure are mixed | Skills and supporting references are separated |
+| Broad instructions compete for context | Atomic skills stay focused |
+| Multi-step behavior is implicit | Combo skills define explicit workflows |
+| One entry point does everything | A router selects the appropriate unit |
+| Quality depends on manual review | The output includes a validation record |
 
-This project is inspired by the wider book-to-skill idea, including [`virgiliojr94/book-to-skill`](https://github.com/virgiliojr94/book-to-skill), but it implements a different architecture: **multi-skill extraction, routing, combination, and validation**.
+The project is inspired by the broader book-to-skill concept, including
+[`virgiliojr94/book-to-skill`](https://github.com/virgiliojr94/book-to-skill), while using an
+original multi-skill architecture centered on planning, routing, composition, and validation.
 
----
+## Requirements
 
-## Install
+- An environment that supports the open Agent Skills `SKILL.md` format.
+- Python 3.10 or newer to run the helper scripts.
+- No third-party Python packages for the included extraction and validation helpers.
 
-Clone or copy this repository into a skill directory supported by your agent environment.
+## Installation
 
-Common locations:
+Clone the repository into a skills directory recognized by your agent environment:
 
 ```bash
-~/.agents/skills/book-skills-creator
-~/.claude/skills/book-skills-creator
-~/.copilot/skills/book-skills-creator
-.github/skills/book-skills-creator
-.agents/skills/book-skills-creator
+mkdir -p ~/.agents/skills
+git clone https://github.com/Tire-C/book-skills-creator.git \
+  ~/.agents/skills/book-skills-creator
 ```
 
-Then reload or restart your agent session so the skill can be discovered.
+Other environments may use locations such as:
 
----
+```text
+.agents/skills/book-skills-creator
+.github/skills/book-skills-creator
+~/.claude/skills/book-skills-creator
+~/.copilot/skills/book-skills-creator
+```
+
+Reload the agent session after installation. See [Setup](docs/SETUP.md) for verification and
+manual-installation options.
 
 ## Usage
 
-Ask your agent something like:
+Invoke the installed skill with a specific source:
 
 ```text
-Use Book Skills Creator on ./books/my-book.pdf
+Use Book Skills Creator on ./books/my-book.docx and create a pack named leadership-toolkit.
 ```
-
-or:
 
 ```text
-Use Book Skills Creator on ./sources/my-book/ and create a skill pack called strategic-thinking-pack
+Use Book Skills Creator on ./sources/research-notes/ and propose the skill map before writing files.
 ```
 
-The skill will:
+Only the file, directory, or glob explicitly selected by the user is in scope. Passing a
+directory intentionally authorizes recursive processing of that directory; unrelated library
+locations are not scanned.
 
-1. validate the selected source;
-2. estimate extraction complexity;
-3. analyze the structure and usable knowledge;
-4. enter planning mode;
-5. propose the skill-pack architecture;
-6. generate the router, atomic skills, combo skills, references, and validation files;
-7. run a final quality check.
+The workflow:
 
-Book Skills Creator processes **only the source explicitly selected by the user**. It does not automatically convert every book in a folder unless the user explicitly requests that folder or glob.
+1. validates the selected source scope;
+2. inspects available formats and extraction quality;
+3. extracts readable text with an appropriate local method;
+4. analyzes reusable concepts, procedures, examples, and anti-patterns;
+5. plans the pack, including rejected candidates and uncertainties;
+6. generates atomic skills, combo skills, references, and a router;
+7. validates naming, coverage, overlap, routing, and source grounding.
 
----
+## Built-in format support
+
+The repository distinguishes source inspection from built-in extraction:
+
+| Format | Inspection | Built-in extraction | Notes |
+|---|---:|---:|---|
+| `.txt` | Yes | Yes | UTF-8 with a safe replacement fallback |
+| `.md`, `.markdown` | Yes | Yes | Preserved as text |
+| `.docx` | Yes | Yes | Reads `word/document.xml` |
+| PDF, EPUB, HTML, RTF, MOBI/AZW | Yes | No | Requires a suitable tool available in the agent environment |
+| Scanned documents | File only | No | Requires OCR outside this repository |
+
+DOCX extraction preserves main-document paragraphs, tabs, and line breaks. It does not extract
+headers, footers, comments, footnotes, embedded objects, tracked-change semantics, or page
+layout. See [Source processing](docs/SOURCE_PROCESSING.md) for details.
 
 ## Generated output
-
-A typical generated pack looks like this:
 
 ```text
 my-book-skill-pack/
@@ -125,8 +123,6 @@ my-book-skill-pack/
       SKILL.md
     risk-analysis/
       SKILL.md
-    communication-method/
-      SKILL.md
   combo/
     strategy-workflow/
       SKILL.md
@@ -138,48 +134,43 @@ my-book-skill-pack/
     chapters/
 ```
 
----
-
-## Design principles
-
-- **Selected source only** — never process a library by accident.
-- **Plan before writing** — every pack starts with an explicit architecture plan.
-- **Operational over encyclopedic** — create skills for usable capabilities, not for every chapter.
-- **Atomic first** — each atomic skill has one mission.
-- **Combine only when useful** — combo skills exist only when multiple skills form a real workflow.
-- **Router as entry point** — the router decides which skill to use.
-- **Source grounded** — every skill points back to the source and reference files.
-- **No long copying** — synthesize methods; do not reproduce copyrighted text.
-- **Validation required** — every pack includes checks for overlap, hallucination risk, and usability.
-
----
+Each generated `SKILL.md` uses YAML frontmatter with a lowercase, hyphenated `name`, a specific
+`description`, and an operational Markdown body.
 
 ## Helper scripts
 
-This repository includes small helper scripts:
+Run helpers from the repository root:
 
 ```bash
 python scripts/preflight.py
-python scripts/inspect_source.py ./books/my-book.pdf
-python scripts/extract_text.py ./books/my-book.md
+python scripts/inspect_source.py ./books/my-book.docx
 python scripts/extract_text.py ./books/my-book.docx
 python scripts/create_pack_scaffold.py my-book-skill-pack
 python scripts/check_pack.py my-book-skill-pack
 ```
 
-`extract_text.py` provides lightweight, standard-library extraction for explicitly selected
-TXT, Markdown, and DOCX files or folders. DOCX extraction reads the main
-`word/document.xml` content without external dependencies. The helper writes combined text
-and extraction metadata to the local `.book_skills_work/` directory. PDF and EPUB extraction
-will be added through separate format-aware helpers in later releases.
+`extract_text.py` writes local working files to `.book_skills_work/`:
 
-The scripts are optional. The main product is the Agent Skill in `SKILL.md`.
+- `full_text.txt` — combined extracted text with source boundaries;
+- `metadata.json` — formats, counts, skipped sources, sizes, and extraction methods.
 
----
+The workspace is ignored by Git. Helpers print summaries and metadata, never extracted source
+content.
+
+## Documentation
+
+- [Specification](docs/SPECIFICATION.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Source processing](docs/SOURCE_PROCESSING.md)
+- [Setup](docs/SETUP.md)
+- [File guide](docs/FILES.md)
+- [Contributing](docs/CONTRIBUTING.md)
+- [Example output tree](examples/output-tree.md)
+- [Sample pack](examples/sample-pack)
+- [Changelog](CHANGELOG.md)
+- [Roadmap](ROADMAP.md)
 
 ## Tests
-
-Run the standard-library test suite from the repository root:
 
 ```bash
 python -m unittest discover -s tests
@@ -187,17 +178,28 @@ python -m compileall -q scripts tests
 python scripts/check_pack.py examples/sample-pack
 ```
 
-The tests create synthetic fixtures in temporary directories and do not commit extracted
-source text or workspace output.
+Tests use synthetic temporary fixtures. No books, private documents, or extracted workspace
+outputs are committed.
 
----
+## Limitations
 
-## Legal and ethical note
+- The included extractor supports TXT, Markdown, and lightweight DOCX only.
+- Complex layout, OCR, tables, images, and rich document semantics are outside the current
+  extraction layer.
+- Generated skills still require source-aware review; extraction quality limits generation
+  quality.
+- Users are responsible for having the right to process their selected sources.
 
-Use books and documents you have the right to process. Book Skills Creator is designed to extract operational structure and references, not to reproduce copyrighted works.
+## Security and responsible use
 
----
+Keep private documents, credentials, and extracted source text out of issues and pull requests.
+Report vulnerabilities according to [SECURITY.md](SECURITY.md).
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](docs/CONTRIBUTING.md) and run the complete test
+suite before opening a pull request.
 
 ## License
 
-MIT License.
+[MIT](LICENSE)

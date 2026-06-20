@@ -88,6 +88,7 @@ class InspectSourceTests(unittest.TestCase):
             result = run_script("inspect_source.py", source_dir)
 
             self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("RECOGNIZED", result.stdout)
             self.assertIn("sample.txt", result.stdout)
             self.assertIn("sample.md", result.stdout)
             self.assertIn("sample.docx", result.stdout)
@@ -297,6 +298,13 @@ class CheckPackTests(unittest.TestCase):
 
 
 class RepositoryQualityTests(unittest.TestCase):
+    def test_preflight_reports_runtime_and_builtin_formats(self) -> None:
+        result = run_script("preflight.py")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Required runtime", result.stdout)
+        self.assertIn("TXT, Markdown, DOCX: AVAILABLE", result.stdout)
+
     def test_all_python_files_parse(self) -> None:
         python_files = sorted(SCRIPTS_DIR.glob("*.py")) + sorted(
             (REPO_ROOT / "tests").glob("*.py")
