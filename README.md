@@ -175,6 +175,21 @@ The scripts are optional. The main product is the Agent Skill in `SKILL.md`.
 
 ---
 
+## Tests
+
+Run the standard-library test suite from the repository root:
+
+```bash
+python -m unittest discover -s tests
+python -m compileall -q scripts tests
+python scripts/check_pack.py examples/sample-pack
+```
+
+The tests create synthetic fixtures in temporary directories and do not commit extracted
+source text or workspace output.
+
+---
+
 ## Legal and ethical note
 
 Use books and documents you have the right to process. Book Skills Creator is designed to extract operational structure and references, not to reproduce copyrighted works.
