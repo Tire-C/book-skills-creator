@@ -28,3 +28,29 @@ Quality notes:
 - scanned PDFs may need OCR outside this project
 - technical PDFs may need better structure tools
 - weak extraction must be reported as a limitation
+
+## Lightweight extraction
+
+Use the standard-library extraction helper for explicitly selected `.txt`, `.md`, and
+`.markdown` sources:
+
+```bash
+python scripts/extract_text.py ./books/my-book.md
+python scripts/extract_text.py ./notes/ ./appendix.txt
+```
+
+The helper scans only the files or folders passed on the command line. Directory inputs are
+processed recursively, symbolic links are skipped, unsupported files are recorded as skipped,
+and duplicate paths are processed once.
+
+The default workspace is `.book_skills_work/`:
+
+- `full_text.txt` contains the supported source text with a clear separator for every file.
+- `metadata.json` records source counts, skipped inputs, byte and character totals, estimated
+  words, decoding information, and the UTC generation time.
+
+The workspace is local and ignored by Git. The helper prints only extraction metadata and
+output locations, never the extracted source text.
+
+PDF, EPUB, DOCX, OCR, and layout-aware extraction remain outside this lightweight helper and
+will be introduced separately.
