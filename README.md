@@ -162,14 +162,16 @@ This repository includes small helper scripts:
 python scripts/preflight.py
 python scripts/inspect_source.py ./books/my-book.pdf
 python scripts/extract_text.py ./books/my-book.md
+python scripts/extract_text.py ./books/my-book.docx
 python scripts/create_pack_scaffold.py my-book-skill-pack
 python scripts/check_pack.py my-book-skill-pack
 ```
 
 `extract_text.py` provides lightweight, standard-library extraction for explicitly selected
-TXT and Markdown files or folders. It writes combined text and extraction metadata to the
-local `.book_skills_work/` directory. PDF, EPUB, and DOCX extraction will be added through
-separate format-aware helpers in later releases.
+TXT, Markdown, and DOCX files or folders. DOCX extraction reads the main
+`word/document.xml` content without external dependencies. The helper writes combined text
+and extraction metadata to the local `.book_skills_work/` directory. PDF and EPUB extraction
+will be added through separate format-aware helpers in later releases.
 
 The scripts are optional. The main product is the Agent Skill in `SKILL.md`.
 

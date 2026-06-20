@@ -31,11 +31,12 @@ Quality notes:
 
 ## Lightweight extraction
 
-Use the standard-library extraction helper for explicitly selected `.txt`, `.md`, and
-`.markdown` sources:
+Use the standard-library extraction helper for explicitly selected `.txt`, `.md`, `.markdown`,
+and `.docx` sources:
 
 ```bash
 python scripts/extract_text.py ./books/my-book.md
+python scripts/extract_text.py ./books/my-book.docx
 python scripts/extract_text.py ./notes/ ./appendix.txt
 ```
 
@@ -47,10 +48,18 @@ The default workspace is `.book_skills_work/`:
 
 - `full_text.txt` contains the supported source text with a clear separator for every file.
 - `metadata.json` records source counts, skipped inputs, byte and character totals, estimated
-  words, decoding information, and the UTC generation time.
+  words, source formats, decoding or extraction methods, and the UTC generation time.
 
 The workspace is local and ignored by Git. The helper prints only extraction metadata and
 output locations, never the extracted source text.
 
-PDF, EPUB, DOCX, OCR, and layout-aware extraction remain outside this lightweight helper and
-will be introduced separately.
+### DOCX behavior
+
+DOCX extraction opens the selected document as an Office Open XML archive and reads only
+`word/document.xml`. Paragraphs, tabs, and line breaks are preserved as plain text. Headers,
+footers, comments, footnotes, tracked-change semantics, embedded objects, and layout are not
+included in this lightweight pass. Invalid archives or documents without readable main XML are
+recorded as skipped.
+
+PDF, EPUB, OCR, and layout-aware extraction remain outside this lightweight helper and will be
+introduced separately.

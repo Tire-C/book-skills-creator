@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""Extract selected plain-text and Markdown sources into a local workspace."""
+"""Extract selected text, Markdown, and DOCX sources into a local workspace."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import re
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
+from xml.etree import ElementTree
 
 
-SUPPORTED_EXTENSIONS = {".txt", ".md", ".markdown"}
+SUPPORTED_EXTENSIONS = {".txt", ".md", ".markdown", ".docx"}
 DEFAULT_OUTPUT = Path(".book_skills_work")
 SEPARATOR_WIDTH = 72
+WORD_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 def is_within(path: Path, directory: Path) -> bool:
@@ -41,13 +44,58 @@ def iter_selected_files(path: Path, output_dir: Path) -> Iterable[Path]:
                 yield item
 
 
-def read_text(path: Path) -> tuple[str, str]:
+def read_plain_text(path: Path) -> tuple[str, str]:
     """Read UTF-8 text, using replacement characters as a safe final fallback."""
     data = path.read_bytes()
     try:
         return data.decode("utf-8-sig"), "utf-8"
     except UnicodeDecodeError:
         return data.decode("utf-8", errors="replace"), "utf-8-replacement"
+
+
+def extract_docx_text(path: Path) -> str:
+    """Extract paragraphs from the main DOCX document XML."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            document_xml = archive.read("word/document.xml")
+    except KeyError as exc:
+        raise ValueError("missing-document-xml") from exc
+    except (zipfile.BadZipFile, RuntimeError) as exc:
+        raise ValueError("invalid-docx-archive") from exc
+
+    try:
+        root = ElementTree.fromstring(document_xml)
+    except ElementTree.ParseError as exc:
+        raise ValueError("invalid-document-xml") from exc
+
+    paragraphs = []
+    paragraph_tag = f"{{{WORD_NAMESPACE}}}p"
+    text_tag = f"{{{WORD_NAMESPACE}}}t"
+    tab_tag = f"{{{WORD_NAMESPACE}}}tab"
+    break_tags = {
+        f"{{{WORD_NAMESPACE}}}br",
+        f"{{{WORD_NAMESPACE}}}cr",
+    }
+
+    for paragraph in root.iter(paragraph_tag):
+        fragments = []
+        for element in paragraph.iter():
+            if element.tag == text_tag and element.text:
+                fragments.append(element.text)
+            elif element.tag == tab_tag:
+                fragments.append("\t")
+            elif element.tag in break_tags:
+                fragments.append("\n")
+        paragraphs.append("".join(fragments))
+
+    return "\n".join(paragraphs)
+
+
+def read_source(path: Path) -> tuple[str, str]:
+    """Read a supported source and return its text and decoding method."""
+    if path.suffix.lower() == ".docx":
+        return extract_docx_text(path), "docx-xml"
+    return read_plain_text(path)
 
 
 def source_label(path: Path) -> str:
@@ -89,12 +137,13 @@ def collect_sources(
 
             try:
                 raw_size = item.stat().st_size
-                text, encoding = read_text(item)
-            except OSError as exc:
+                text, encoding = read_source(item)
+            except (OSError, ValueError) as exc:
+                reason = str(exc) if isinstance(exc, ValueError) else exc.__class__.__name__
                 skipped.append(
                     {
                         "path": source_label(item),
-                        "reason": f"read-error: {exc.__class__.__name__}",
+                        "reason": f"read-error: {reason}",
                     }
                 )
                 continue
@@ -102,6 +151,7 @@ def collect_sources(
             supported.append(
                 {
                     "path": source_label(item),
+                    "format": item.suffix.lower().lstrip("."),
                     "bytes": raw_size,
                     "characters": len(text),
                     "encoding": encoding,
@@ -175,7 +225,7 @@ def print_summary(output_dir: Path, metadata: dict[str, object]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Extract selected TXT and Markdown sources into a local workspace."
+        description="Extract selected TXT, Markdown, and DOCX sources into a local workspace."
     )
     parser.add_argument("paths", nargs="+", help="Explicit source file(s) or folder(s)")
     parser.add_argument(
@@ -189,7 +239,7 @@ def main() -> None:
     output_dir = args.output.expanduser()
     sources, skipped = collect_sources(args.paths, output_dir)
     if not sources:
-        print("No supported TXT or Markdown sources were found.")
+        print("No readable TXT, Markdown, or DOCX sources were found.")
         print(f"Skipped sources: {len(skipped)}")
         raise SystemExit(1)
 

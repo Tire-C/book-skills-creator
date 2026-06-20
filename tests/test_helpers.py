@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 
@@ -50,12 +51,38 @@ def write_valid_pack(root: Path) -> None:
     )
 
 
+def write_docx(path: Path, paragraphs: list[list[tuple[str, str]]]) -> None:
+    """Create a minimal synthetic DOCX containing text, tabs, and line breaks."""
+    namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    paragraph_xml = []
+    for paragraph in paragraphs:
+        runs = []
+        for kind, value in paragraph:
+            if kind == "text":
+                runs.append(f"<w:r><w:t>{value}</w:t></w:r>")
+            elif kind == "tab":
+                runs.append("<w:r><w:tab/></w:r>")
+            elif kind == "break":
+                runs.append("<w:r><w:br/></w:r>")
+        paragraph_xml.append(f"<w:p>{''.join(runs)}</w:p>")
+
+    document_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<w:document xmlns:w="{namespace}"><w:body>'
+        f"{''.join(paragraph_xml)}"
+        "</w:body></w:document>"
+    )
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("word/document.xml", document_xml)
+
+
 class InspectSourceTests(unittest.TestCase):
     def test_explicit_directory_reports_supported_and_unsupported_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             source_dir = Path(temporary)
             (source_dir / "sample.txt").write_text("Plain text fixture.", encoding="utf-8")
             (source_dir / "sample.md").write_text("# Markdown fixture\n", encoding="utf-8")
+            write_docx(source_dir / "sample.docx", [[("text", "DOCX fixture.")]])
             (source_dir / "ignored.csv").write_text("a,b\n1,2\n", encoding="utf-8")
 
             result = run_script("inspect_source.py", source_dir)
@@ -63,8 +90,9 @@ class InspectSourceTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("sample.txt", result.stdout)
             self.assertIn("sample.md", result.stdout)
+            self.assertIn("sample.docx", result.stdout)
             self.assertIn("ignored.csv | unsupported", result.stdout)
-            self.assertRegex(result.stdout, r"COUNT\s+2\s*$")
+            self.assertRegex(result.stdout, r"COUNT\s+3\s*$")
 
     def test_returns_one_when_no_supported_source_exists(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -87,10 +115,24 @@ class ExtractTextTests(unittest.TestCase):
             text_file = source_dir / "sample.txt"
             markdown_file = source_dir / "sample.md"
             markdown_long_file = source_dir / "appendix.markdown"
+            docx_file = source_dir / "sample.docx"
             text_file.write_text("Plain text fixture.", encoding="utf-8")
             markdown_file.write_text("# Markdown fixture\n\nSecond source.", encoding="utf-8")
             markdown_long_file.write_text(
                 "# Markdown extension fixture\n", encoding="utf-8"
+            )
+            write_docx(
+                docx_file,
+                [
+                    [("text", "DOCX first paragraph.")],
+                    [
+                        ("text", "Second"),
+                        ("tab", ""),
+                        ("text", "paragraph"),
+                        ("break", ""),
+                        ("text", "continued."),
+                    ],
+                ],
             )
             (source_dir / "ignored.csv").write_text("a,b\n1,2\n", encoding="utf-8")
 
@@ -104,6 +146,7 @@ class ExtractTextTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertNotIn("Plain text fixture.", result.stdout)
+            self.assertNotIn("DOCX first paragraph.", result.stdout)
             self.assertTrue((output_dir / "full_text.txt").is_file())
             self.assertTrue((output_dir / "metadata.json").is_file())
 
@@ -112,14 +155,71 @@ class ExtractTextTests(unittest.TestCase):
                 (output_dir / "metadata.json").read_text(encoding="utf-8")
             )
 
-            self.assertEqual(full_text.count("SOURCE:"), 3)
-            self.assertEqual(metadata["supported_sources"], 3)
+            self.assertEqual(full_text.count("SOURCE:"), 4)
+            self.assertIn(
+                "DOCX first paragraph.\nSecond\tparagraph\ncontinued.", full_text
+            )
+            self.assertEqual(metadata["supported_sources"], 4)
             self.assertEqual(metadata["skipped_sources"], 1)
-            self.assertEqual(metadata["total_sources"], 4)
+            self.assertEqual(metadata["total_sources"], 5)
             self.assertGreater(metadata["total_bytes"], 0)
             self.assertGreater(metadata["total_characters"], 0)
             self.assertGreater(metadata["estimated_words"], 0)
             self.assertEqual(metadata["skipped"][0]["reason"], "unsupported")
+            formats = {source["format"] for source in metadata["sources"]}
+            self.assertEqual(formats, {"txt", "md", "markdown", "docx"})
+            docx_metadata = next(
+                source for source in metadata["sources"] if source["format"] == "docx"
+            )
+            self.assertEqual(docx_metadata["encoding"], "docx-xml")
+
+    def test_invalid_docx_is_skipped_without_creating_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            invalid_docx = root / "invalid.docx"
+            output_dir = root / ".book_skills_work"
+            invalid_docx.write_bytes(b"not a zip archive")
+
+            result = run_script(
+                "extract_text.py", invalid_docx, "--output", output_dir
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("No readable TXT, Markdown, or DOCX sources", result.stdout)
+            self.assertNotIn("not a zip archive", result.stdout)
+            self.assertFalse(output_dir.exists())
+
+    def test_docx_without_main_document_xml_is_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            incomplete_docx = root / "incomplete.docx"
+            output_dir = root / ".book_skills_work"
+            with zipfile.ZipFile(incomplete_docx, "w") as archive:
+                archive.writestr("[Content_Types].xml", "<Types/>")
+
+            result = run_script(
+                "extract_text.py", incomplete_docx, "--output", output_dir
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("No readable TXT, Markdown, or DOCX sources", result.stdout)
+            self.assertFalse(output_dir.exists())
+
+    def test_docx_with_invalid_main_xml_is_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            malformed_docx = root / "malformed.docx"
+            output_dir = root / ".book_skills_work"
+            with zipfile.ZipFile(malformed_docx, "w") as archive:
+                archive.writestr("word/document.xml", "<w:document>")
+
+            result = run_script(
+                "extract_text.py", malformed_docx, "--output", output_dir
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("No readable TXT, Markdown, or DOCX sources", result.stdout)
+            self.assertFalse(output_dir.exists())
 
     def test_returns_one_and_writes_nothing_without_supported_sources(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -134,7 +234,7 @@ class ExtractTextTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 1)
-            self.assertIn("No supported TXT or Markdown sources", result.stdout)
+            self.assertIn("No readable TXT, Markdown, or DOCX sources", result.stdout)
             self.assertFalse(output_dir.exists())
 
     def test_symlink_input_is_skipped_when_supported_by_the_platform(self) -> None:
