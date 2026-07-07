@@ -1,18 +1,22 @@
 # Roadmap
 
 Book Skills Creator prioritizes reliable, source-grounded skill-pack generation over broad
-format coverage.
+format coverage. v1.0.0 shipped the modular pack workflow, the standard-library helpers, the
+automated tests, and the public documentation.
 
-## Before v1.0
+## Next
 
-- Publish a tagged GitHub release with concise release notes.
+- Configurable source and archive safety limits (size caps, file-count caps).
+- Lightweight EPUB extraction with synthetic fixtures.
+- Stricter `check_pack.py` validation of generated `SKILL.md` frontmatter and router coverage.
 
-## After v1.0
+## Later
 
-- Add configurable source and archive safety limits.
-- Evaluate lightweight EPUB extraction.
-- Improve structural validation of generated `SKILL.md` frontmatter and router coverage.
-- Add extraction-quality reporting for richer document structures.
+- Extraction-quality reporting for richer document structures.
+- Optional adapters for external extraction tools (PDF, OCR) without mandatory dependencies.
 
-Items may change based on user feedback. New formats should be added independently, with
-synthetic fixtures, explicit limitations, and no mandatory dependencies unless justified.
+## Principles for new work
+
+Items may change based on user feedback. New formats are added independently, each with
+synthetic fixtures, explicit limitations, and no mandatory third-party dependencies unless
+clearly justified.

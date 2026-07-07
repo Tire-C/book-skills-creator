@@ -6,6 +6,18 @@ Public releases follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Continuous integration workflow running the unit tests, bytecode compilation, and sample-pack
+  validation on every push and pull request.
+- Examples guide describing the sample pack, its reading order, and its role as a test fixture.
+
+### Changed
+
+- Rewrote the README around the problem the project solves: quickstart, generated-pack
+  contents, use cases, design principles, FAQ, and repository structure.
+- Refreshed the roadmap for the post-1.0 cycle.
+
 ## [1.0.0] - 2026-06-20
 
 ### Added
