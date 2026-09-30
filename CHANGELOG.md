@@ -6,9 +6,11 @@ Public releases follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-30
+
 ### Added
 
-- 2.0 development architecture: shared explicit source discovery; structured evidence units and
+- 2.0 architecture: shared explicit source discovery; structured evidence units and
   source hashes; built-in HTML/EPUB extraction; optional local PDF text adapter; configurable
   source/archive limits; canonical `pack.json`; exact generation; graph, provenance, and file
   validation; behavioral case artifacts; and incremental impact reporting.
