@@ -1,49 +1,29 @@
 # Architecture
 
-Book Skills Creator combines an Agent Skill workflow with deterministic, optional helper
-scripts.
-
-## Layers
-
-### 1. Agent skill layer
-
-`SKILL.md` contains the operational instructions loaded by compatible agents.
-
-### 2. Extraction layer
-
-Local helpers inspect explicitly selected paths and extract TXT, Markdown, and lightweight DOCX
-into a Git-ignored workspace. Other recognized formats require tools supplied by the host
-environment.
-
-### 3. Planning layer
-
-The agent analyzes the source and presents the skill-pack architecture before writing generated
-files. The plan includes rejected candidates, extraction gaps, and uncertainties.
-
-### 4. Generation layer
-
-The agent writes a pack with router, atomic skills, combo skills, references, maps, and validation notes.
-
-### 5. Validation layer
-
-The agent checks structure, source grounding, naming, overlap, routing coverage, and usability.
-`scripts/check_pack.py` provides deterministic structural validation.
-
-## Pack model
+Book Skills Creator 2.0 is an Agent Skill plus a local, standard-library Python core. Its pipeline is:
 
 ```text
-router
-  -> atomic skill
-  -> combo skill
-  -> references
+explicit selection → shared discovery → structured extraction → sources.json
+→ agent capability analysis → ready plan.json → deterministic build → pack.json + SKILL.md files
+→ deterministic validation → semantic and behavioral review
 ```
 
-The router is the public entry point. Atomic skills do one job. Combo skills chain multiple
-jobs. References preserve context without overloading the active skill.
+`book_skills/discovery.py` owns scope, symlinks, deduplication, output exclusion, and limits. `extraction.py` converts each source into ordered evidence units. `pack.py` defines the canonical plan/pack representation and renders Markdown. `validation.py` checks structural contracts and the capability graph. `cli.py` exposes the commands; `scripts/` contains the CLI entry point and compatibility wrappers.
 
-## Data boundaries
+## Responsibility boundary
 
-- Input scope comes only from user-selected paths.
-- Temporary extraction data stays outside generated packs.
-- Generated skills synthesize procedures rather than reproducing source material.
-- No helper requires network access.
+Code owns path selection, bytes and archive limits, source and unit hashes, stable IDs, serialization, names, file agreement, evidence references, routes, dependencies, cycles, orphans, and reports. The agent owns capability discovery, distinctions between knowledge and procedure, overlap decisions, synthesis, conflict interpretation, and routing behavior. Similarity and verbatim checks produce review warnings; neither decides semantic truth.
+
+## Source model
+
+The ignored `sources.json` contains `sources[]`, each with a logical ID, selected path, format, byte count, source SHA-256, extraction method/version, extraction timestamp, extracted SHA-256, warnings, and `units[]`. Units carry stable IDs derived from source identity and heading context, kind, heading path, order, optional line range, length, hash, and local text. Line ranges are emitted for Markdown and plain text; DOCX/HTML/EPUB do not claim page or line precision. IDs remain stable for edits within a unit, though inserting an earlier unit of the same kind in a section can shift later IDs. The hash detects changed content.
+
+## Pack graph and provenance
+
+`pack.json` is the canonical IR. It retains source metadata and an evidence index **without source text**, candidate decisions, atomic and combo units, dependencies, routes, references, conflicts, uncertainties, and behavioral cases. Router routes point to `atomic:<id>`, `combo:<id>`, or `reference:<id>`. Combo dependencies point to atomic or combo nodes. Every unit must be reachable from a route and every cited evidence ID must exist. Validation detects dependency cycles and missing targets. Generated Markdown is reproducible from `pack.json`, so manual drift is detectable.
+
+The pack records source and unit hashes. `validate --extraction` compares both directions: removed or changed planned material is stale, while a newly selected source or a new unit in an existing source is unreviewed. The plan's evidence index includes all extracted units, even those unused by capabilities, so ordinary unused evidence does not cause an error. `update` reports changed, new, and removed units plus affected skills, including dependent combos; reference nodes use the same `reference:<id>` prefix as routes. An agent must revise impacted synthesis and inspect new evidence for additional capabilities before rebuilding. Changes to unreferenced evidence still mark the source changed, but may affect no existing skill.
+
+## Validation limits
+
+The validator can prove structural consistency, not that a source truly teaches a procedure or that a router will behave correctly in every agent. Agent/human review must inspect evidence, resolve conflicts, evaluate suggested overlap, and run the behavioral cases. See [Specification](SPECIFICATION.md).

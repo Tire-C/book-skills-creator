@@ -1,17 +1,5 @@
-# Sample pack
+# Lantern Field Desk
 
-This synthetic fixture demonstrates the minimum structure of a generated pack and is used by
-the automated validation tests.
+A synthetic, source-grounded pack for receiving and routing fictional field reports.
 
-It contains no real book text or private source material. Generic skill names are intentional:
-the example focuses on file layout, routing, metadata, references, and validation rather than a
-specific subject domain.
-
-Use it to inspect the expected relationship between:
-
-- the router entry point;
-- atomic units;
-- a combo workflow;
-- references;
-- the source index and skill map;
-- validation notes.
+Start at [the router](router/SKILL.md). The selected sources and known extraction limits are in [the source index](source_index.md).

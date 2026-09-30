@@ -1,26 +1,15 @@
-# Generated pack file guide
-
-This guide describes the public files expected in a generated skill pack.
+# Generated pack files
 
 | Path | Purpose |
 |---|---|
-| `README.md` | Explains the pack's scope, installation, entry point, and limitations |
-| `source_index.md` | Records selected sources, extraction methods, and known gaps |
-| `skill_map.md` | Lists every skill, route, dependency, and rejected candidate |
-| `validation.md` | Records structural, routing, overlap, and grounding checks |
-| `router/SKILL.md` | Selects the smallest appropriate atomic or combo skill |
-| `atomic/<name>/SKILL.md` | Implements one focused, reusable capability |
-| `combo/<name>/SKILL.md` | Orchestrates multiple atomic skills into a workflow |
-| `references/concepts.md` | Stores supporting concepts that do not need active instructions |
-| `references/glossary.md` | Defines source-specific terminology |
-| `references/examples.md` | Contains short synthesized examples |
-| `references/anti_patterns.md` | Records failure modes and misuse patterns |
-| `references/chapters/` | Holds optional source-structure notes |
+| `pack.json` | Canonical 2.0 IR: source/evidence metadata, capability graph, candidate decisions, routes, references, conflicts, uncertainties, and behavioral cases |
+| `README.md` | Scope and router entry point |
+| `source_index.md` | Source hashes, extraction methods, and warnings |
+| `skill_map.md` | Atomic/combo inventory, dependencies, rejected proposals, and unresolved issues |
+| `validation.md` | How to run the current validator; the live report comes from the CLI |
+| `router/SKILL.md` | Smallest suitable route, explanation, clarification, and unsupported behavior |
+| `atomic/<id>/SKILL.md` | One focused capability with inputs, procedure, output, constraints, evidence |
+| `combo/<id>/SKILL.md` | Workflow orchestration and handoffs |
+| `references/<id>.md` | Supporting knowledge, linked to evidence |
 
-## Design rules
-
-- Split broad capabilities into atomic skills.
-- Use combo skills for orchestration, not duplicated instructions.
-- Keep explanatory material in references when it is not an executable workflow.
-- Ensure the router and skill map can reach every generated skill.
-- Keep source provenance and extraction limitations visible.
+The file tree is rendered from a `ready` plan. There are no production placeholders. Markdown content is checked against `pack.json`; edit the plan and rebuild to change a generated pack. Behavioral cases live in the manifest for agent/human evaluation.

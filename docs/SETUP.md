@@ -1,70 +1,13 @@
 # Setup
 
-Book Skills Creator is distributed as an Agent Skill repository with optional Python helpers.
-
-## Requirements
-
-- an Agent Skills-compatible environment;
-- Git for clone-based installation;
-- Python 3.10 or newer for helper scripts.
-
-The included helpers use only the Python standard library.
-
-## Clone installation
-
-Clone the repository into a skill directory supported by your environment:
+Use Python 3.10 or newer. The core has no mandatory third-party dependencies. Clone this repository into a skills directory recognized by your agent environment, or invoke `scripts/book_skills.py` from the repository checkout. `SKILL.md` is the agent-facing workflow; the Python CLI is local and provider-neutral.
 
 ```bash
-mkdir -p ~/.agents/skills
-git clone https://github.com/Tire-C/book-skills-creator.git \
-  ~/.agents/skills/book-skills-creator
-```
-
-Repository-local installations can use:
-
-```text
-.agents/skills/book-skills-creator
-.github/skills/book-skills-creator
-```
-
-Other compatible environments may use a different user-level skills directory. Keep the
-repository folder intact so `SKILL.md`, scripts, templates, documentation, and examples remain
-available together.
-
-## Manual installation
-
-Download or copy the repository into the chosen skills directory. Confirm that the final path
-contains:
-
-```text
-book-skills-creator/
-  SKILL.md
-  scripts/
-  templates/
-  docs/
-```
-
-Reload or restart the agent session after installation.
-
-## Verify the checkout
-
-From the repository root:
-
-```bash
-python scripts/preflight.py
+python scripts/book_skills.py preflight --json
 python -m unittest discover -s tests
-python scripts/check_pack.py examples/sample-pack
+python scripts/book_skills.py validate examples/sample-pack --json
 ```
 
-The preflight command reports the Python runtime and optional external document tools. Missing
-optional tools do not affect TXT, Markdown, or DOCX extraction.
+The first command reports optional local `pdftotext` and OCR availability; OCR remains an external workflow. The last command succeeds with an intentional unresolved-conflict warning in the synthetic fixture.
 
-## Updating
-
-For a Git installation:
-
-```bash
-git pull --ff-only
-```
-
-Reload the agent session if `SKILL.md` changed.
+The old helper paths remain callable. New work should use `scripts/book_skills.py`. Use `validate --legacy` only for a v1 Markdown-only pack. See [migration](MIGRATION.md) for pack changes.
