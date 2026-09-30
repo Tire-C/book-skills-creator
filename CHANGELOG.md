@@ -22,11 +22,13 @@ Public releases follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Hardened fresh-extraction validation for added sources and evidence, canonicalized affected reference IDs,
+  and rejected malformed snapshots, source changes during extraction, and undeclared pack files.
 - Legacy helpers now forward to one CLI and share source discovery. `create_pack_scaffold.py` now
   builds from a ready plan without placeholders. The v1 sample and templates are retained under
   `examples/v1-*`.
-- Rewrote the README around the problem the project solves: quickstart, generated-pack
-  contents, use cases, design principles, FAQ, and repository structure.
+- Rewrote the README around the problem the project solves, the 2.0 workflow, supported formats,
+  verification, and migration.
 - Refreshed the roadmap for the post-1.0 cycle.
 
 ## [1.0.0] - 2026-06-20

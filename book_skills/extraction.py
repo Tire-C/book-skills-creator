@@ -312,6 +312,9 @@ def normalize_units(source_id: str, blocks: list[dict], limits: Limits) -> list[
 
 
 def extract_file(path: Path, limits: Limits) -> dict:
+    original = path.read_bytes()
+    if len(original) > limits.max_file_bytes:
+        raise ValueError("file-size-limit")
     fmt = path.suffix.lower()
     source_id = "src-" + digest(label(path).encode())[:16]
     warnings: list[str] = []
@@ -333,10 +336,12 @@ def extract_file(path: Path, limits: Limits) -> dict:
     else:
         raise ValueError("extractor-unavailable")
     units = normalize_units(source_id, blocks, limits)
+    if path.read_bytes() != original:
+        raise ValueError("source-changed-during-extraction")
     if not units:
         warnings.append("no-readable-text")
-    return {"id": source_id, "path": label(path), "format": fmt.lstrip("."), "bytes": path.stat().st_size,
-            "sha256": digest(path.read_bytes()), "method": method, "extractor_version": "2.0",
+    return {"id": source_id, "path": label(path), "format": fmt.lstrip("."), "bytes": len(original),
+            "sha256": digest(original), "method": method, "extractor_version": "2.0",
             "encoding": encoding,
             "quality": "unreadable" if not units else "partial" if warnings else "complete",
             "extracted_at": datetime.now(timezone.utc).isoformat(), "extracted_sha256": digest("\n".join(u["text"] for u in units).encode()),

@@ -4,6 +4,8 @@ Only paths explicitly passed to `inspect` or `extract` are considered. Files are
 
 The same discovery logic is used by inspection and extraction. Configurable flags on both commands include `--max-files` (500), `--max-entries` (5000), `--max-file-bytes` (50 MiB), `--max-total-bytes` (250 MiB), `--max-depth` (20), `--max-archive-entries` (2000), `--max-archive-bytes` (150 MiB), `--max-archive-ratio` (200), and `--max-text-chars` (20 million). These defaults are safety limits, not product caps on the number of skills. Archive entry paths and advertised expansion are checked before reading. Archive files are never unpacked to disk.
 
+Extraction rejects a file that changes while it is being read, so a source hash cannot silently describe different bytes from the extracted evidence. The skipped-input report records `source-changed-during-extraction`; retry extraction from a stable file.
+
 | Format | Built-in extraction | Preserved structure | Limitation |
 |---|---|---|---|
 | TXT | Yes | Paragraph blocks and line ranges | No headings inferred |

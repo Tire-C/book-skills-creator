@@ -12,6 +12,7 @@ import unittest
 import warnings
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -163,6 +164,19 @@ class SourceTests(unittest.TestCase):
             self.assertFalse(data["sources"])
             self.assertEqual(data["skipped"][0]["reason"], "no-readable-text")
 
+    def test_source_mutation_cannot_mix_evidence_and_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "changing.txt"
+            path.write_text("first version", encoding="utf-8")
+            from book_skills.extraction import read_text
+            def changed_during_read(source: Path, limits: Limits):
+                result = read_text(source, limits)
+                source.write_text("second version", encoding="utf-8")
+                return result
+            with patch("book_skills.extraction.read_text", side_effect=changed_during_read):
+                with self.assertRaisesRegex(ValueError, "source-changed-during-extraction"):
+                    extract_file(path, Limits())
+
     def test_slugs_are_ascii_and_bounded(self) -> None:
         self.assertEqual(slugify("Risk_Analysis"), "risk-analysis")
         for value in ("東京", "!!!", "a" * 65):
@@ -223,6 +237,7 @@ class PackTests(unittest.TestCase):
         changes = {
             "bad-evidence-id": lambda p: p["atomic"][0]["evidence"].append("missing"),
             "bad-source-id": lambda p: p["evidence"][0].update(source_id="missing"),
+            "wrong-source-association": lambda p: p["evidence"][0].update(source_id=p["sources"][1]["id"]),
             "broken-dependency": lambda p: p["combo"][0]["dependencies"].append("atomic:missing"),
             "dependency-cycle": lambda p: p["combo"][0]["dependencies"].append("combo:respond-to-signal"),
             "broken-route": lambda p: p["routes"][0].update(target="atomic:missing"),
@@ -236,7 +251,10 @@ class PackTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 plan = copy.deepcopy(self.plan)
                 change(plan)
-                self.assertIn(expected, codes(validate_plan(plan)))
+                self.assertIn("bad-source-id" if expected == "wrong-source-association" else expected, codes(validate_plan(plan)))
+        plan = copy.deepcopy(self.plan)
+        next(case for case in plan["behavior_tests"] if case["type"] == "combo")["target"] = "atomic:intake-signal"
+        self.assertIn("bad-behavior-target", codes(validate_plan(plan)))
 
     def test_manifest_and_filesystem_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -252,6 +270,9 @@ class PackTests(unittest.TestCase):
             extra.parent.mkdir()
             extra.write_text("---\nname: rogue\ndescription: \"rogue\"\n---\n", encoding="utf-8")
             self.assertIn("unlisted-skill", codes(validate_pack(pack)["issues"]))
+            (pack / "extra" / "stray.md").parent.mkdir()
+            (pack / "extra" / "stray.md").write_text("Undeclared", encoding="utf-8")
+            self.assertIn("unlisted-generated-file", codes(validate_pack(pack)["issues"]))
             (pack / "pack.json").unlink()
             self.assertIn("missing-manifest", codes(validate_pack(pack)["issues"]))
 
@@ -286,6 +307,36 @@ class PackTests(unittest.TestCase):
                 plan = copy.deepcopy(self.plan)
                 change(plan)
                 self.assertTrue(any(item["severity"] == "ERROR" for item in validate_plan(plan)))
+        malformed = copy.deepcopy(self.plan)
+        malformed["sources"][0] = 7
+        self.assertIn("invalid-source", codes(validate_plan(malformed, self.extraction)))
+
+    def test_malformed_fresh_extraction_returns_json_issue(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            for fresh in ({}, {"schema_version": "2.0", "sources": [{"id": "broken", "units": None}]},
+                          {"schema_version": "2.0", "sources": [{"id": "broken", "sha256": "x", "extracted_sha256": "x", "method": "x", "extractor_version": "x", "units": [{"id": "e", "sha256": "x"}]}]},
+                          self._tampered_extraction()):
+                with self.subTest(fresh=fresh):
+                    source_file = root / "bad.json"
+                    source_file.write_text(dump_json(fresh), encoding="utf-8")
+                    for command in (["validate", str(pack), "--extraction", str(source_file)], ["update", str(pack), str(source_file)]):
+                        result = subprocess.run([*cli, *command, "--json"], cwd=ROOT, capture_output=True, text=True, check=False)
+                        self.assertEqual(result.returncode, 1, result.stderr)
+                        self.assertIn("invalid-extraction", codes(json.loads(result.stdout)["issues"]))
+            source_file.write_text("{broken json", encoding="utf-8")
+            result = subprocess.run([*cli, "validate", str(pack), "--extraction", str(source_file), "--json"], cwd=ROOT, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("input-error", codes(json.loads(result.stdout)["issues"]))
+
+    @classmethod
+    def _tampered_extraction(cls) -> dict:
+        fresh = copy.deepcopy(cls.extraction)
+        fresh["sources"][0]["units"][0]["text"] += " altered"
+        return fresh
 
     def test_long_verbatim_overlap_warns(self) -> None:
         plan = copy.deepcopy(self.plan)
@@ -360,6 +411,68 @@ class PackTests(unittest.TestCase):
             changed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
             result = json.loads(changed.stdout)
             self.assertIn("atomic:decide-route", result["affected_units"])
+
+    def test_fresh_extraction_membership_matches_update(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manual = root / "field-manual.md"
+            errata = root / "field-errata.md"
+            shutil.copyfile(ROOT / "examples/sources/field-manual.md", manual)
+            shutil.copyfile(ROOT / "examples/sources/field-errata.md", errata)
+            paths = [str(manual), str(errata)]
+            first = extract_selected(paths, root / "work", Limits())
+            plan = make_plan(first)
+            pack = root / "pack"
+            build(plan, pack)
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+
+            def update(fresh: dict) -> dict:
+                path = root / "fresh.json"
+                path.write_text(dump_json(fresh), encoding="utf-8")
+                result = subprocess.run([*cli, "update", str(pack), str(path), "--json"], cwd=ROOT, capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return json.loads(result.stdout)
+
+            self.assertEqual(validate_pack(pack, first)["errors"], 0)
+            self.assertEqual(update(first)["status"], "CURRENT")
+
+            appendix = root / "new-appendix.md"
+            appendix.write_text("# Appendix\n\nA new independent procedure needs review.\n", encoding="utf-8")
+            added = extract_selected([*paths, str(appendix)], root / "work", Limits())
+            self.assertIn("new-source-unreviewed", codes(validate_pack(pack, added)["issues"]))
+            self.assertNotIn("new-evidence-unreviewed", codes(validate_pack(pack, added)["issues"]))
+            self.assertEqual(update(added)["status"], "STALE")
+            self.assertTrue(update(added)["new_evidence"])
+
+            removed = extract_selected([str(manual)], root / "work", Limits())
+            self.assertIn("stale-source", codes(validate_pack(pack, removed)["issues"]))
+            self.assertEqual(update(removed)["status"], "STALE")
+
+            manual.write_text(manual.read_text(encoding="utf-8") + "\n## New checklist\n\nCheck the new item.\n", encoding="utf-8")
+            expanded = extract_selected(paths, root / "work", Limits())
+            self.assertIn("new-evidence-unreviewed", codes(validate_pack(pack, expanded)["issues"]))
+            self.assertEqual(update(expanded)["status"], "STALE")
+            self.assertTrue(update(expanded)["new_evidence"])
+
+    def test_update_uses_canonical_reference_node(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manual = root / "field-manual.md"
+            errata = root / "field-errata.md"
+            shutil.copyfile(ROOT / "examples/sources/field-manual.md", manual)
+            shutil.copyfile(ROOT / "examples/sources/field-errata.md", errata)
+            paths = [str(manual), str(errata)]
+            first = extract_selected(paths, root / "work", Limits())
+            pack = root / "pack"
+            build(make_plan(first), pack)
+            manual.write_text(manual.read_text(encoding="utf-8").replace("A signal is", "A recorded signal is"), encoding="utf-8")
+            fresh = extract_selected(paths, root / "work", Limits())
+            write_extraction(fresh, root / "work")
+            result = subprocess.run([sys.executable, str(ROOT / "scripts/book_skills.py"), "update", str(pack), str(root / "work/sources.json"), "--json"], cwd=ROOT, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            affected = json.loads(result.stdout)["affected_units"]
+            self.assertIn("reference:terms", affected)
+            self.assertFalse(any(node.startswith("references:") for node in affected))
 
 
 if __name__ == "__main__":

@@ -297,6 +297,23 @@ class CheckPackTests(unittest.TestCase):
             self.assertIn("invalid-frontmatter", result.stdout)
             self.assertIn("broken", result.stdout)
 
+    def test_legacy_symlink_directory_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            pack.mkdir()
+            write_valid_pack(pack)
+            shutil.rmtree(pack / "atomic")
+            outside = root / "outside"
+            outside.mkdir()
+            try:
+                (pack / "atomic").symlink_to(outside, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"Symbolic links are unavailable: {exc}")
+            result = run_script("check_pack.py", pack, "--legacy", "--json")
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("symlink-generated-file", result.stdout)
+
 
 class RepositoryQualityTests(unittest.TestCase):
     def test_preflight_reports_runtime_and_builtin_formats(self) -> None:

@@ -4,6 +4,8 @@
 
 The output separates focused **Atomic Skills**, orchestrating **Combo Skills**, a **Router** that chooses the smallest suitable unit, and **References** for knowledge that does not need to be a skill. Chapter boundaries never determine the number of skills.
 
+This keeps a request for one procedure from loading an entire book's instructions, while still allowing a larger workflow to combine the procedures it needs. Typical sources include an operations manual plus errata, a collection of SOPs, or course notes with several independent methods.
+
 ```text
 selected sources → structured evidence → agent capability plan → pack.json
 → atomic + combo + router + references → validation and review
@@ -34,7 +36,7 @@ The `plan` command deliberately creates a **draft**, not guessed skills. An agen
 
 ## What 2.0 verifies
 
-The standard-library core shares one explicit source discovery policy between inspection and extraction. It emits ordered evidence units with source and content hashes, structure and line ranges where recoverable, methods, versions, and warnings. A canonical `pack.json` drives exact Markdown generation. Validation checks names, metadata, manifest/file agreement, evidence IDs, routes, dependencies, cycles, orphans, stale sources when a fresh extraction is provided, and suspicious overlap or long verbatim copying.
+The standard-library core shares one explicit source discovery policy between inspection and extraction. It emits ordered evidence units with source and content hashes, structure and line ranges where recoverable, methods, versions, and warnings. A canonical `pack.json` drives exact Markdown generation. Validation checks names, metadata, manifest/file agreement, evidence IDs, routes, dependencies, cycles, orphans, changed or newly selected sources and evidence when a fresh extraction is provided, and suspicious overlap or long verbatim copying.
 
 Semantic judgments remain the agent's responsibility: whether a procedure is truly supported, how to split overlapping capabilities, how to interpret conflicting sources, and how the router behaves on real requests. The manifest holds explicit behavioral cases for review. Reports use findings and severity, not a fabricated quality score.
 
@@ -53,6 +55,8 @@ python scripts/book_skills.py update ./field-operations .book_skills_work/source
 ```
 
 The report identifies changed evidence and affected skills, including dependent combos. Review and regenerate those units before rebuilding. Automatic semantic rewriting is not claimed.
+
+[`virgiliojr94/book-to-skill`](https://github.com/virgiliojr94/book-to-skill) is a historical inspiration for the book-to-skill idea. Book Skills Creator follows a different architecture: it plans and validates a routed pack of atomic and combo capabilities rather than treating one document as one skill.
 
 The v1 helper names (`inspect_source.py`, `extract_text.py`, `preflight.py`, and `check_pack.py`) remain as wrappers. `create_pack_scaffold.py` now requires a ready plan and writes exactly its units. Validate a v1 pack without `pack.json` using the explicit `--legacy` flag; the former synthetic pack and templates are preserved under `examples/v1-*`. See [migration](docs/MIGRATION.md).
 

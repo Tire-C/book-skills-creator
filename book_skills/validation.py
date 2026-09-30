@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from difflib import SequenceMatcher
@@ -34,6 +35,44 @@ def required_list(item: dict, fields: tuple[str, ...], items: list[dict], locati
     for field in fields:
         if not is_strings(item.get(field), nonempty):
             issue(items, "ERROR", "invalid-list", location, field)
+
+
+def validate_extraction(extraction: object) -> list[dict]:
+    """Reject damaged extraction snapshots before comparing or reading source text."""
+    issues: list[dict] = []
+    if not isinstance(extraction, dict) or extraction.get("schema_version") != "2.0" or not isinstance(extraction.get("sources"), list):
+        issue(issues, "ERROR", "invalid-extraction", "sources.json")
+        return issues
+    source_ids: set[str] = set()
+    evidence_ids: set[str] = set()
+    for source in extraction["sources"]:
+        if (not isinstance(source, dict) or not isinstance(source.get("id"), str)
+                or not source["id"] or not isinstance(source.get("units"), list)
+                or any(not isinstance(source.get(key), str) or not source[key] for key in ("method", "extractor_version"))
+                or any(not isinstance(source.get(key), str) or not HEX.fullmatch(source[key]) for key in ("sha256", "extracted_sha256"))):
+            issue(issues, "ERROR", "invalid-extraction", "sources.json")
+            return issues
+        if source["id"] in source_ids:
+            issue(issues, "ERROR", "invalid-extraction", "sources.json", "duplicate source ID")
+            return issues
+        source_ids.add(source["id"])
+        for unit in source["units"]:
+            if (not isinstance(unit, dict) or not isinstance(unit.get("id"), str) or not unit["id"]
+                    or not isinstance(unit.get("sha256"), str) or not HEX.fullmatch(unit["sha256"])
+                    or not isinstance(unit.get("text"), str)):
+                issue(issues, "ERROR", "invalid-extraction", "sources.json")
+                return issues
+            if unit["id"] in evidence_ids:
+                issue(issues, "ERROR", "invalid-extraction", "sources.json", "duplicate evidence ID")
+                return issues
+            if hashlib.sha256(unit["text"].encode()).hexdigest() != unit["sha256"]:
+                issue(issues, "ERROR", "invalid-extraction", "sources.json", "evidence hash mismatch")
+                return issues
+            evidence_ids.add(unit["id"])
+        if hashlib.sha256("\n".join(unit["text"] for unit in source["units"]).encode()).hexdigest() != source["extracted_sha256"]:
+            issue(issues, "ERROR", "invalid-extraction", "sources.json", "extracted hash mismatch")
+            return issues
+    return issues
 
 
 def validate_plan(plan: dict, extraction: dict | None = None) -> list[dict]:
@@ -98,7 +137,8 @@ def validate_plan(plan: dict, extraction: dict | None = None) -> list[dict]:
         if eid in evidence_ids:
             issue(issues, "ERROR", "duplicate-evidence-id", str(eid))
         evidence_ids.add(eid)
-        if not isinstance(evidence.get("source_id"), str) or evidence["source_id"] not in source_ids:
+        if (not isinstance(evidence.get("source_id"), str) or evidence["source_id"] not in source_ids
+                or not eid.startswith(evidence["source_id"] + "-")):
             issue(issues, "ERROR", "bad-source-id", str(eid))
         if not HEX.fullmatch(str(evidence.get("sha256", ""))):
             issue(issues, "ERROR", "invalid-hash", str(eid))
@@ -236,8 +276,11 @@ def validate_plan(plan: dict, extraction: dict | None = None) -> list[dict]:
     for case in plan["behavior_tests"]:
         if not isinstance(case, dict) or not isinstance(case.get("type"), str) or case["type"] not in CASES or not isinstance(case.get("request"), str) or not case["request"].strip():
             issue(issues, "ERROR", "invalid-behavior-case", "behavior_tests")
-        elif case["type"] in {"positive", "combo", "reference", "negative"} and (not isinstance(case.get("target"), str) or case["target"] not in nodes):
-            issue(issues, "ERROR", "bad-behavior-target", "behavior_tests")
+        elif case["type"] in {"positive", "combo", "reference", "negative"}:
+            expected_kind = "reference" if case["type"] == "reference" else "combo" if case["type"] == "combo" else "atomic"
+            target = case.get("target")
+            if not isinstance(target, str) or target not in nodes or not target.startswith(expected_kind + ":"):
+                issue(issues, "ERROR", "bad-behavior-target", "behavior_tests")
     for i, left in enumerate(plan["atomic"]):
         for right in plan["atomic"][i + 1:]:
             if not isinstance(left, dict) or not isinstance(right, dict):
@@ -257,9 +300,23 @@ def validate_plan(plan: dict, extraction: dict | None = None) -> list[dict]:
                     a, b = flow_step.casefold().strip(), atomic_step.casefold().strip()
                     if len(a) > 60 and len(b) > 60 and SequenceMatcher(None, a, b).ratio() > .85:
                         issue(issues, "WARNING", "combo-duplicates-atomic", str(combo.get("id")), str(atomic.get("id")))
-    if extraction:
-        old_sources = {s["id"]: s for s in extraction.get("sources", [])}
-        old_evidence = {u["id"]: u for s in extraction.get("sources", []) for u in s.get("units", [])}
+    if extraction is not None:
+        if any(item["severity"] == "ERROR" for item in issues):
+            return issues
+        issues.extend(validate_extraction(extraction))
+        if any(item["code"] == "invalid-extraction" for item in issues):
+            return issues
+        fresh_sources = extraction["sources"]
+        old_sources = {s["id"]: s for s in fresh_sources}
+        evidence_sources = {u["id"]: s["id"] for s in fresh_sources for u in s["units"]}
+        old_evidence = {u["id"]: u for s in fresh_sources for u in s["units"]}
+        planned_sources = {s["id"] for s in plan["sources"] if isinstance(s, dict) and isinstance(s.get("id"), str)}
+        planned_evidence = {u["id"] for u in plan["evidence"] if isinstance(u, dict) and isinstance(u.get("id"), str)}
+        for sid in sorted(old_sources.keys() - planned_sources):
+            issue(issues, "ERROR", "new-source-unreviewed", sid)
+        for eid in sorted(old_evidence.keys() - planned_evidence):
+            if evidence_sources[eid] in planned_sources:
+                issue(issues, "ERROR", "new-evidence-unreviewed", eid)
         for source in plan["sources"]:
             current = old_sources.get(source.get("id"))
             if current is None or current.get("sha256") != source.get("sha256"):
@@ -322,27 +379,12 @@ def validate_pack(root: Path, extraction: dict | None = None, legacy: bool = Fal
                 valid_description = False
             if not valid_description:
                 issue(issues, "ERROR", "invalid-frontmatter", relative)
-    for actual in root.rglob("SKILL.md"):
+    for actual in root.rglob("*"):
         relative = actual.relative_to(root).as_posix()
         if is_link(actual):
             issue(issues, "ERROR", "symlink-generated-file", relative)
-            continue
-        if relative not in expected:
-            issue(issues, "ERROR", "unlisted-skill", relative)
-    for directory in ("atomic", "combo", "router", "references"):
-        folder = root / directory
-        if folder.exists():
-            for actual in folder.rglob("*"):
-                if is_link(actual):
-                    issue(issues, "ERROR", "symlink-generated-file", actual.relative_to(root).as_posix())
-                    continue
-                if actual.is_file():
-                    relative = actual.relative_to(root).as_posix()
-                    if is_link(actual):
-                        issue(issues, "ERROR", "symlink-generated-file", relative)
-                        continue
-                    if relative not in expected and actual.name != "SKILL.md":
-                        issue(issues, "ERROR", "unlisted-generated-file", relative)
+        elif actual.is_file() and relative not in expected and relative != "pack.json":
+            issue(issues, "ERROR", "unlisted-skill" if actual.name == "SKILL.md" else "unlisted-generated-file", relative)
     for relative, content in expected.items():
         for destination in re.findall(r"\[[^\]]+\]\(([^)]+)\)", content):
             if destination.startswith(("http:", "https:", "mailto:", "#")):
@@ -378,13 +420,21 @@ def compare_verbatim(files: dict[str, str], extraction: dict, issues: list[dict]
 def validate_legacy(root: Path) -> dict:
     issues: list[dict] = []
     for relative in ("README.md", "source_index.md", "skill_map.md", "validation.md", "router/SKILL.md"):
-        if not (root / relative).is_file():
+        target = root / relative
+        if linked_within(root, target):
+            issue(issues, "ERROR", "symlink-generated-file", relative)
+        elif not target.is_file():
             issue(issues, "ERROR", "missing-legacy-file", relative)
     for relative in ("atomic", "combo", "references"):
-        if not (root / relative).is_dir():
+        target = root / relative
+        if is_link(target):
+            issue(issues, "ERROR", "symlink-generated-file", relative)
+        elif not target.is_dir():
             issue(issues, "ERROR", "missing-legacy-directory", relative)
     for path in root.rglob("SKILL.md") if root.exists() else []:
-        if not FRONTMATTER.match(path.read_text(encoding="utf-8")):
+        if linked_within(root, path):
+            issue(issues, "ERROR", "symlink-generated-file", path.relative_to(root).as_posix())
+        elif not FRONTMATTER.match(path.read_text(encoding="utf-8")):
             issue(issues, "ERROR", "invalid-frontmatter", path.relative_to(root).as_posix())
     issue(issues, "WARNING", "legacy-pack", ".", "No pack.json; graph and provenance cannot be verified")
     return report(issues)

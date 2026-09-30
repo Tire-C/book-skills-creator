@@ -11,7 +11,7 @@ from pathlib import Path
 from .discovery import Limits, discover, label
 from .extraction import extract_selected, public_metadata, write_extraction
 from .pack import build, draft_plan, dump_json, load_json
-from .validation import report, validate_pack, validate_plan
+from .validation import report, validate_extraction, validate_pack, validate_plan
 
 
 def limits_from(args: argparse.Namespace) -> Limits:
@@ -109,6 +109,10 @@ def validate_command(args: argparse.Namespace) -> int:
 def update_command(args: argparse.Namespace) -> int:
     plan_data = load_json(args.pack / "pack.json")
     fresh = load_json(args.extraction)
+    problems = validate_plan(plan_data) + validate_extraction(fresh)
+    if any(item["severity"] == "ERROR" for item in problems):
+        print_result(report(problems), args.json)
+        return 1
     old_sources = {source["id"]: source for source in plan_data["sources"]}
     new_sources = {source["id"]: source for source in fresh["sources"]}
     old_units = {unit["id"]: unit for unit in plan_data["evidence"]}
@@ -118,7 +122,7 @@ def update_command(args: argparse.Namespace) -> int:
     new_evidence = sorted(new_units.keys() - old_units.keys())
     removed_evidence = sorted(old_units.keys() - new_units.keys())
     changed_set = set(changed_evidence)
-    affected = {kind + ":" + unit["id"] for kind in ("atomic", "combo", "references") for unit in plan_data[kind] if set(unit.get("evidence", [])) & changed_set}
+    affected = {("reference" if kind == "references" else kind) + ":" + unit["id"] for kind in ("atomic", "combo", "references") for unit in plan_data[kind] if set(unit.get("evidence", [])) & changed_set}
     changed = True
     while changed:
         before = len(affected)
@@ -170,8 +174,8 @@ def parser() -> argparse.ArgumentParser:
     p = sub.add_parser("extract"); source(p); p.set_defaults(func=extract)
     p = sub.add_parser("plan"); p.add_argument("extraction", type=Path); p.add_argument("name"); p.add_argument("--title"); p.add_argument("--output", type=Path, required=True); p.add_argument("--force", action="store_true"); common(p); p.set_defaults(func=plan)
     p = sub.add_parser("build"); p.add_argument("plan", type=Path); p.add_argument("--output", type=Path, required=True); p.add_argument("--force", action="store_true"); common(p); p.set_defaults(func=build_command)
-    p = sub.add_parser("validate"); p.add_argument("pack", type=Path); p.add_argument("--extraction", type=Path); p.add_argument("--legacy", action="store_true", help="Check a v1 Markdown-only pack with limited guarantees"); common(p); p.set_defaults(func=validate_command)
-    p = sub.add_parser("update"); p.add_argument("pack", type=Path); p.add_argument("extraction", type=Path); p.add_argument("--output", type=Path); common(p); p.set_defaults(func=update_command)
+    p = sub.add_parser("validate"); p.add_argument("pack", type=Path); p.add_argument("--extraction", type=Path, help="Fresh sources.json; check changed, added, and removed source evidence"); p.add_argument("--legacy", action="store_true", help="Check a v1 Markdown-only pack with limited guarantees"); common(p); p.set_defaults(func=validate_command)
+    p = sub.add_parser("update"); p.add_argument("pack", type=Path); p.add_argument("extraction", type=Path, help="Fresh sources.json to compare with pack.json"); p.add_argument("--output", type=Path); common(p); p.set_defaults(func=update_command)
     return root
 
 
@@ -180,5 +184,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        print(f"error: {str(exc) if isinstance(exc, ValueError) else exc.__class__.__name__}", file=sys.stderr)
+        detail = str(exc) if isinstance(exc, ValueError) else exc.__class__.__name__
+        if args.json:
+            print_result(report([{"severity": "ERROR", "code": "input-error", "location": "cli", "detail": detail}]), True)
+        else:
+            print(f"error: {detail}", file=sys.stderr)
         return 2
