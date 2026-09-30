@@ -1,0 +1,693 @@
+{
+  "schema_version": "2.0",
+  "status": "ready",
+  "pack": {
+    "name": "lantern-field-desk",
+    "title": "Lantern Field Desk",
+    "description": "A synthetic, source-grounded pack for receiving and routing fictional field reports."
+  },
+  "sources": [
+    {
+      "id": "src-cb165ae4cf6701fc",
+      "path": "examples/sources/field-errata.md",
+      "format": "md",
+      "bytes": 507,
+      "sha256": "bce1b325852a74127ed41a14436ee33b23ff4bb7e5bbb0f74db6866ca9c8d134",
+      "method": "markdown-blocks",
+      "extractor_version": "2.0",
+      "extracted_sha256": "4711367fbff6b2d5b65205f623d2c405e0fc21a18323c414e385b900e8f32c7e",
+      "quality": "complete",
+      "warnings": []
+    },
+    {
+      "id": "src-1a0a594410af81c1",
+      "path": "examples/sources/field-manual.md",
+      "format": "md",
+      "bytes": 2993,
+      "sha256": "8335ee6cc47a87df3ca4a47f09fb3a68a1ec90c7271ffa01b6f835670788bb73",
+      "method": "markdown-blocks",
+      "extractor_version": "2.0",
+      "extracted_sha256": "b714cd198ac342feb1808cf4a4b7376b62e24fd1a2650cbe81c9212fb7f1f9aa",
+      "quality": "complete",
+      "warnings": []
+    }
+  ],
+  "evidence": [
+    {
+      "id": "src-cb165ae4cf6701fc-28891e3a11fb",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Errata"
+      ],
+      "order": 1,
+      "line_start": 1,
+      "line_end": 1,
+      "characters": 27,
+      "sha256": "7f872387ceb767f56e9b5f1e296e49c5a64a7f5b1dd1101063fe9276e9650423",
+      "source_id": "src-cb165ae4cf6701fc"
+    },
+    {
+      "id": "src-cb165ae4cf6701fc-755eb0c87001",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Errata",
+        "Verification timing conflict"
+      ],
+      "order": 2,
+      "line_start": 3,
+      "line_end": 3,
+      "characters": 31,
+      "sha256": "d9549b28f283d9bf9dce118a418ba41db154e466918c5f56fcb1b7cf283ef4ca",
+      "source_id": "src-cb165ae4cf6701fc"
+    },
+    {
+      "id": "src-cb165ae4cf6701fc-2bd3d613eed6",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Errata",
+        "Verification timing conflict"
+      ],
+      "order": 3,
+      "line_start": 5,
+      "line_end": 5,
+      "characters": 273,
+      "sha256": "e55ecc15718b1fce98bfd4c4329297b120cfe9f85f5c56b4e8d31872c3f37174",
+      "source_id": "src-cb165ae4cf6701fc"
+    },
+    {
+      "id": "src-cb165ae4cf6701fc-ad56fdaec1b8",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Errata",
+        "Exception"
+      ],
+      "order": 4,
+      "line_start": 7,
+      "line_end": 7,
+      "characters": 12,
+      "sha256": "e685f817e7106d2d064586015453b10c6dfe4bb2289916eca2884fb10f316589",
+      "source_id": "src-cb165ae4cf6701fc"
+    },
+    {
+      "id": "src-cb165ae4cf6701fc-4471191b7180",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Errata",
+        "Exception"
+      ],
+      "order": 5,
+      "line_start": 9,
+      "line_end": 9,
+      "characters": 155,
+      "sha256": "4aac71794b3ec61449e3ea0358cbcb285ffd1f3d44585bea39ed606cca5e1c6f",
+      "source_id": "src-cb165ae4cf6701fc"
+    },
+    {
+      "id": "src-1a0a594410af81c1-0dc9a90006b8",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Manual"
+      ],
+      "order": 1,
+      "line_start": 1,
+      "line_end": 1,
+      "characters": 27,
+      "sha256": "59ebdcf5b978320001ff2250dd5ecc816e4979f97e7e252c85e2f6d97c5bbf4e",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-481346b5be56",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Manual"
+      ],
+      "order": 2,
+      "line_start": 3,
+      "line_end": 3,
+      "characters": 144,
+      "sha256": "5c19897db38275a6f346f22d43123f2a2b907d1ed8dd15c7a6e238e6a54a9e93",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-42d1eff86d1e",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Terms and background"
+      ],
+      "order": 3,
+      "line_start": 5,
+      "line_end": 5,
+      "characters": 23,
+      "sha256": "f238df6cedf768898d5c342ad37dfa34d54e716b4026a914c33cf4519fde28a4",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-cea6602c9751",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Terms and background"
+      ],
+      "order": 4,
+      "line_start": 7,
+      "line_end": 7,
+      "characters": 255,
+      "sha256": "fe157a7a40f5e81934257ea2cbbc02ebdf1e56074592cb4c63b259c378b47397",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-19512bb71bd7",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Intake a signal"
+      ],
+      "order": 5,
+      "line_start": 9,
+      "line_end": 9,
+      "characters": 18,
+      "sha256": "e096bad919f4661737f8d922f0a63d3c0ef142b81d8360c7db5a2aadd90ad578",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-92a3339d4067",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Intake a signal"
+      ],
+      "order": 6,
+      "line_start": 11,
+      "line_end": 11,
+      "characters": 296,
+      "sha256": "af2550fda8cca0130f1d510a41643e3a4f212f93f22c0e894aded97b6a0b303a",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-f222f3881b1a",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Decide the route"
+      ],
+      "order": 7,
+      "line_start": 13,
+      "line_end": 13,
+      "characters": 19,
+      "sha256": "737095353bae1835cd8b12c9db343e632f3f1e2dbc0195360e9b0fdb8fef6f3e",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-6f5e034784ae",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Decide the route"
+      ],
+      "order": 8,
+      "line_start": 15,
+      "line_end": 15,
+      "characters": 390,
+      "sha256": "50064a016a7d166c4d651aea5aa9908760c103017a38224af2da121494629583",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-34e1f929478c",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Verify and close"
+      ],
+      "order": 9,
+      "line_start": 17,
+      "line_end": 17,
+      "characters": 19,
+      "sha256": "61bae2fed0d188a17ceb4f6f204d15fcd84c8806e7eb2910de3f81fc4c611ace",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-61466bf98140",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Verify and close"
+      ],
+      "order": 10,
+      "line_start": 19,
+      "line_end": 19,
+      "characters": 340,
+      "sha256": "923464a4fea8b54bf1ee399bc3f5a39bc9147e4ea643d6b2fdf9b6faca2b34b6",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-fc8d7cdc3c81",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Full response workflow"
+      ],
+      "order": 11,
+      "line_start": 21,
+      "line_end": 21,
+      "characters": 25,
+      "sha256": "dbd9caf57143ea31acff1fe6d384bb6fea1278b3d56c10fd5a2a2cce83be6f6f",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-c3edaa2cf8d7",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Full response workflow"
+      ],
+      "order": 12,
+      "line_start": 23,
+      "line_end": 23,
+      "characters": 262,
+      "sha256": "a71141a517c2b4efab9b6b1781b3cb8bf7d608f41b8dd87419bde21fdba91a9e",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-10e5c23aeb0b",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Quick triage wording"
+      ],
+      "order": 13,
+      "line_start": 25,
+      "line_end": 25,
+      "characters": 23,
+      "sha256": "44d3a2a56514cc6727a8268fe287705bccd0713214743d55993debeecf65f79f",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-0cb1c7a6ae83",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Quick triage wording"
+      ],
+      "order": 14,
+      "line_start": 27,
+      "line_end": 27,
+      "characters": 167,
+      "sha256": "790385ef821a99be972136767b571c8e98b2198b9bb3e42493d839535f281d82",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-0ae8874e4bd4",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Checklist and anti-pattern"
+      ],
+      "order": 15,
+      "line_start": 29,
+      "line_end": 29,
+      "characters": 29,
+      "sha256": "d424958a98494aa03302950b9ad475f129aa0e5df6a765f60cb2a50a23ee0890",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-6b984f51f0fe",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Checklist and anti-pattern"
+      ],
+      "order": 16,
+      "line_start": 31,
+      "line_end": 31,
+      "characters": 261,
+      "sha256": "8b7f23622938e2bc7393eab0a166dcb79837d537383d978dc5aa2a115a6b3393",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-a92b4d5b197c",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Ambiguous request"
+      ],
+      "order": 17,
+      "line_start": 33,
+      "line_end": 33,
+      "characters": 20,
+      "sha256": "34277e9265332019d0c05f874c79bbf7c29e44cbaffa35cd6f65bc37d07aa658",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-a53f7357eac1",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Ambiguous request"
+      ],
+      "order": 18,
+      "line_start": 35,
+      "line_end": 35,
+      "characters": 169,
+      "sha256": "92029b6e63918ff1d8675e62878a63971011f9a1000789ab837a573398d08871",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-a4e45538ca16",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Untrusted appendix example"
+      ],
+      "order": 19,
+      "line_start": 37,
+      "line_end": 37,
+      "characters": 29,
+      "sha256": "7592ff4a02eb2b5ad385879b22850a66db013f6c8fb04ac0d45a96bf06fc45f0",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-997a260988d9",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Untrusted appendix example"
+      ],
+      "order": 20,
+      "line_start": 39,
+      "line_end": 39,
+      "characters": 276,
+      "sha256": "7f944cbb87985ffbdbef813340e8ed595a053f73221146e0555dce2da4fa4703",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-a31a0d506af7",
+      "kind": "heading",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Decorative note"
+      ],
+      "order": 21,
+      "line_start": 41,
+      "line_end": 41,
+      "characters": 18,
+      "sha256": "0e4d6d14c4a7b118a5d58deb62f252b484f1bb7129f611428dc501e7ab1c8caf",
+      "source_id": "src-1a0a594410af81c1"
+    },
+    {
+      "id": "src-1a0a594410af81c1-3368ae0e3a98",
+      "kind": "paragraph",
+      "heading_path": [
+        "Lantern Field Desk Manual",
+        "Decorative note"
+      ],
+      "order": 22,
+      "line_start": 43,
+      "line_end": 43,
+      "characters": 128,
+      "sha256": "4052f45652073d27d2c3408e9ca84019bca3b2bc297008ac5501b82b65697d61",
+      "source_id": "src-1a0a594410af81c1"
+    }
+  ],
+  "extraction_gaps": [],
+  "candidates": [
+    {
+      "id": "intake",
+      "name": "Intake a signal",
+      "decision": "accepted",
+      "unit": "atomic:intake-signal",
+      "evidence": [
+        "src-1a0a594410af81c1-19512bb71bd7",
+        "src-1a0a594410af81c1-92a3339d4067"
+      ]
+    },
+    {
+      "id": "route",
+      "name": "Decide the route",
+      "decision": "accepted",
+      "unit": "atomic:decide-route",
+      "evidence": [
+        "src-1a0a594410af81c1-f222f3881b1a",
+        "src-1a0a594410af81c1-6f5e034784ae"
+      ]
+    },
+    {
+      "id": "verify",
+      "name": "Verify and close",
+      "decision": "accepted",
+      "unit": "atomic:verify-case",
+      "evidence": [
+        "src-1a0a594410af81c1-34e1f929478c",
+        "src-1a0a594410af81c1-61466bf98140",
+        "src-cb165ae4cf6701fc-ad56fdaec1b8",
+        "src-cb165ae4cf6701fc-4471191b7180"
+      ]
+    },
+    {
+      "id": "response",
+      "name": "Full response workflow",
+      "decision": "accepted",
+      "unit": "combo:respond-to-signal",
+      "evidence": [
+        "src-1a0a594410af81c1-fc8d7cdc3c81",
+        "src-1a0a594410af81c1-c3edaa2cf8d7",
+        "src-1a0a594410af81c1-0ae8874e4bd4",
+        "src-1a0a594410af81c1-6b984f51f0fe"
+      ]
+    },
+    {
+      "id": "quick",
+      "name": "Quick triage",
+      "decision": "rejected",
+      "reason": "Duplicates intake and routing; the source calls it shorthand.",
+      "evidence": [
+        "src-1a0a594410af81c1-10e5c23aeb0b",
+        "src-1a0a594410af81c1-0cb1c7a6ae83"
+      ]
+    },
+    {
+      "id": "amber",
+      "name": "Amber labels",
+      "decision": "rejected",
+      "reason": "Decorative context without a repeatable procedure.",
+      "evidence": [
+        "src-1a0a594410af81c1-a31a0d506af7",
+        "src-1a0a594410af81c1-3368ae0e3a98"
+      ]
+    },
+    {
+      "id": "terms",
+      "name": "Desk terms",
+      "decision": "reference",
+      "unit": "reference:terms",
+      "evidence": [
+        "src-1a0a594410af81c1-42d1eff86d1e",
+        "src-1a0a594410af81c1-cea6602c9751"
+      ]
+    }
+  ],
+  "atomic": [
+    {
+      "id": "intake-signal",
+      "title": "Intake a signal",
+      "description": "Create a fact-separated intake record for a new field report.",
+      "mission": "Turn one report into a traceable intake record.",
+      "use_when": "A new signal needs recording before any routing decision.",
+      "inputs": [
+        "Original report",
+        "Reporter and time context"
+      ],
+      "steps": [
+        "Record time, location, reporter, and claimed effect.",
+        "Assign a case ID and mark missing decision-relevant facts.",
+        "Ask focused questions for those facts; keep reported facts separate from interpretation."
+      ],
+      "output": "A concise intake record with a case ID and explicit gaps.",
+      "constraints": [
+        "Do not infer missing facts."
+      ],
+      "evidence": [
+        "src-1a0a594410af81c1-19512bb71bd7",
+        "src-1a0a594410af81c1-92a3339d4067"
+      ],
+      "grounding": "grounded"
+    },
+    {
+      "id": "decide-route",
+      "title": "Decide the route",
+      "description": "Select escalation, watch, or duplicate handling from an intake record.",
+      "mission": "Choose and justify one route for a recorded signal.",
+      "use_when": "An intake record is ready for a routing decision.",
+      "inputs": [
+        "Intake record",
+        "Known case matches"
+      ],
+      "steps": [
+        "Check for a reported active safety effect; escalate if present.",
+        "If uncertain but repeatable, open a watch note with a review time.",
+        "If clearly duplicated, link the existing case and explain the match.",
+        "Record the evidence and reason for the choice."
+      ],
+      "output": "A route decision with its reason and next action.",
+      "constraints": [
+        "Urgent wording alone does not establish an active effect."
+      ],
+      "evidence": [
+        "src-1a0a594410af81c1-f222f3881b1a",
+        "src-1a0a594410af81c1-6f5e034784ae"
+      ],
+      "grounding": "grounded"
+    },
+    {
+      "id": "verify-case",
+      "title": "Verify an escalated case",
+      "description": "Confirm the outcome of an escalated field case and record exceptions.",
+      "mission": "Verify the condition and action before closing an escalated case.",
+      "use_when": "A case was escalated and its current result needs confirmation.",
+      "inputs": [
+        "Case ID",
+        "Owner response",
+        "Intake and route records"
+      ],
+      "steps": [
+        "Ask the owner to confirm the current condition and action.",
+        "Compare the answer with the intake and route records.",
+        "Record exceptions or failed contact, and keep the case open if confirmation is missing."
+      ],
+      "output": "A verified closure record or an open case with a documented next attempt.",
+      "constraints": [
+        "The selected sources disagree on the verification deadline; obtain an authoritative rule before committing to one."
+      ],
+      "evidence": [
+        "src-1a0a594410af81c1-34e1f929478c",
+        "src-1a0a594410af81c1-61466bf98140",
+        "src-cb165ae4cf6701fc-ad56fdaec1b8",
+        "src-cb165ae4cf6701fc-4471191b7180"
+      ],
+      "grounding": "grounded"
+    }
+  ],
+  "combo": [
+    {
+      "id": "respond-to-signal",
+      "title": "Respond to a signal",
+      "description": "Orchestrate intake, routing, and any needed verification for a field report.",
+      "mission": "Carry a report through the smallest complete response path.",
+      "use_when": "The user asks to handle a report from arrival through its next disposition.",
+      "dependencies": [
+        "atomic:intake-signal",
+        "atomic:decide-route",
+        "atomic:verify-case"
+      ],
+      "flow": [
+        "Run intake and pass the case ID with decision-relevant facts to routing.",
+        "Run routing and branch on its selected path.",
+        "For escalation, run verification; for a watch note, schedule review; for a duplicate, link the existing case."
+      ],
+      "output": "A case record with its chosen route and current disposition.",
+      "evidence": [
+        "src-1a0a594410af81c1-fc8d7cdc3c81",
+        "src-1a0a594410af81c1-c3edaa2cf8d7",
+        "src-1a0a594410af81c1-0ae8874e4bd4",
+        "src-1a0a594410af81c1-6b984f51f0fe",
+        "src-1a0a594410af81c1-19512bb71bd7",
+        "src-1a0a594410af81c1-92a3339d4067",
+        "src-1a0a594410af81c1-f222f3881b1a",
+        "src-1a0a594410af81c1-6f5e034784ae",
+        "src-1a0a594410af81c1-34e1f929478c",
+        "src-1a0a594410af81c1-61466bf98140",
+        "src-cb165ae4cf6701fc-ad56fdaec1b8",
+        "src-cb165ae4cf6701fc-4471191b7180"
+      ],
+      "grounding": "grounded"
+    }
+  ],
+  "routes": [
+    {
+      "when": "Record a new report",
+      "target": "atomic:intake-signal"
+    },
+    {
+      "when": "Choose an action for an intake record",
+      "target": "atomic:decide-route"
+    },
+    {
+      "when": "Confirm an escalated case",
+      "target": "atomic:verify-case"
+    },
+    {
+      "when": "Handle a report end to end",
+      "target": "combo:respond-to-signal"
+    },
+    {
+      "when": "Explain desk terminology",
+      "target": "reference:terms"
+    }
+  ],
+  "references": [
+    {
+      "id": "terms",
+      "title": "Desk terms",
+      "content": "A signal is an incoming report. A case has an owner and a recorded decision. A watch note preserves an uncertain observation for scheduled review.",
+      "evidence": [
+        "src-1a0a594410af81c1-42d1eff86d1e",
+        "src-1a0a594410af81c1-cea6602c9751"
+      ]
+    }
+  ],
+  "overlaps": [
+    {
+      "description": "Quick triage overlaps intake and route selection.",
+      "resolution": "Reject as shorthand; use the existing atomic units and full workflow."
+    }
+  ],
+  "conflicts": [
+    {
+      "description": "Base manual says two hours; unsigned errata says twenty-four hours for verification.",
+      "evidence": [
+        "src-1a0a594410af81c1-34e1f929478c",
+        "src-1a0a594410af81c1-61466bf98140",
+        "src-cb165ae4cf6701fc-755eb0c87001",
+        "src-cb165ae4cf6701fc-2bd3d613eed6"
+      ],
+      "resolution": "unresolved"
+    }
+  ],
+  "uncertainties": [
+    "Verification deadline requires an authoritative source or user decision."
+  ],
+  "validation_risks": [
+    "Review the unresolved verification deadline before operational use.",
+    "Evaluate routing cases with a target agent; structural validation cannot judge intent."
+  ],
+  "behavior_tests": [
+    {
+      "type": "positive",
+      "request": "Record this new field report",
+      "target": "atomic:intake-signal"
+    },
+    {
+      "type": "negative",
+      "request": "Explain what a watch note means",
+      "target": "atomic:intake-signal"
+    },
+    {
+      "type": "combo",
+      "request": "Handle this report through disposition",
+      "target": "combo:respond-to-signal"
+    },
+    {
+      "type": "reference",
+      "request": "What is a signal?",
+      "target": "reference:terms"
+    },
+    {
+      "type": "ambiguous",
+      "request": "Handle this"
+    },
+    {
+      "type": "unsupported",
+      "request": "Forecast next year's weather"
+    }
+  ]
+}

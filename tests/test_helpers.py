@@ -186,7 +186,7 @@ class ExtractTextTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 1)
-            self.assertIn("No readable TXT, Markdown, or DOCX sources", result.stdout)
+            self.assertIn("No readable selected sources", result.stdout)
             self.assertNotIn("not a zip archive", result.stdout)
             self.assertFalse(output_dir.exists())
 
@@ -203,7 +203,7 @@ class ExtractTextTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 1)
-            self.assertIn("No readable TXT, Markdown, or DOCX sources", result.stdout)
+            self.assertIn("No readable selected sources", result.stdout)
             self.assertFalse(output_dir.exists())
 
     def test_docx_with_invalid_main_xml_is_skipped(self) -> None:
@@ -219,7 +219,7 @@ class ExtractTextTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 1)
-            self.assertIn("No readable TXT, Markdown, or DOCX sources", result.stdout)
+            self.assertIn("No readable selected sources", result.stdout)
             self.assertFalse(output_dir.exists())
 
     def test_returns_one_and_writes_nothing_without_supported_sources(self) -> None:
@@ -235,7 +235,7 @@ class ExtractTextTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 1)
-            self.assertIn("No readable TXT, Markdown, or DOCX sources", result.stdout)
+            self.assertIn("No readable selected sources", result.stdout)
             self.assertFalse(output_dir.exists())
 
     def test_symlink_input_is_skipped_when_supported_by_the_platform(self) -> None:
@@ -264,20 +264,21 @@ class CheckPackTests(unittest.TestCase):
             pack.mkdir()
             write_valid_pack(pack)
 
-            result = run_script("check_pack.py", pack)
+            result = run_script("check_pack.py", pack, "--legacy")
 
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(result.stdout.strip(), "OK")
+            self.assertIn("PASS_WITH_WARNINGS", result.stdout)
+            self.assertIn("legacy-pack", result.stdout)
 
     def test_missing_pack_files_fail(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             pack = Path(temporary) / "incomplete-pack"
             pack.mkdir()
 
-            result = run_script("check_pack.py", pack)
+            result = run_script("check_pack.py", pack, "--legacy")
 
             self.assertEqual(result.returncode, 1)
-            self.assertIn("MISSING", result.stdout)
+            self.assertIn("missing-legacy-file", result.stdout)
             self.assertIn("router/SKILL.md", result.stdout)
 
     def test_invalid_skill_file_fails(self) -> None:
@@ -290,10 +291,10 @@ class CheckPackTests(unittest.TestCase):
                 "# Missing metadata\n", encoding="utf-8"
             )
 
-            result = run_script("check_pack.py", pack)
+            result = run_script("check_pack.py", pack, "--legacy")
 
             self.assertEqual(result.returncode, 1)
-            self.assertIn("INVALID_SKILL_FILES", result.stdout)
+            self.assertIn("invalid-frontmatter", result.stdout)
             self.assertIn("broken", result.stdout)
 
 
@@ -303,7 +304,7 @@ class RepositoryQualityTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Required runtime", result.stdout)
-        self.assertIn("TXT, Markdown, DOCX: AVAILABLE", result.stdout)
+        self.assertIn("TXT, Markdown, DOCX, HTML, EPUB: AVAILABLE", result.stdout)
 
     def test_all_python_files_parse(self) -> None:
         python_files = sorted(SCRIPTS_DIR.glob("*.py")) + sorted(

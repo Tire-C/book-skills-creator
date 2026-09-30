@@ -1,11 +1,3 @@
 # Validation
 
-Status: example only.
-
-Checks:
-- router exists
-- atomic folder exists
-- combo folder exists
-- references folder exists
-- source index exists
-- map exists
+Run `python scripts/check_pack.py <pack-path> --json` for the current deterministic report. Review semantic grounding, overlap, conflicts, and behavioral cases separately.

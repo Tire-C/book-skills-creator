@@ -8,12 +8,23 @@ Public releases follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- 2.0 development architecture: shared explicit source discovery; structured evidence units and
+  source hashes; built-in HTML/EPUB extraction; optional local PDF text adapter; configurable
+  source/archive limits; canonical `pack.json`; exact generation; graph, provenance, and file
+  validation; behavioral case artifacts; and incremental impact reporting.
+- Original multi-source synthetic manual, errata, and generated 2.0 pack with a preserved conflict,
+  rejected candidates, and prompt-injection regression coverage.
+- CLI, architecture/specification/security/migration documentation, and targeted safety and graph
+  tests.
 - Continuous integration workflow running the unit tests, bytecode compilation, and sample-pack
   validation on every push and pull request.
 - Examples guide describing the sample pack, its reading order, and its role as a test fixture.
 
 ### Changed
 
+- Legacy helpers now forward to one CLI and share source discovery. `create_pack_scaffold.py` now
+  builds from a ready plan without placeholders. The v1 sample and templates are retained under
+  `examples/v1-*`.
 - Rewrote the README around the problem the project solves: quickstart, generated-pack
   contents, use cases, design principles, FAQ, and repository structure.
 - Refreshed the roadmap for the post-1.0 cycle.

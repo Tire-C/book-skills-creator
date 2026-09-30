@@ -7,9 +7,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +20,8 @@ jobs:
       - name: Unit tests
         run: python -m unittest discover -s tests
       - name: Bytecode compilation
-        run: python -m compileall -q scripts tests
+        run: python -m compileall -q book_skills scripts tests examples/build_sample.py
       - name: Sample pack validation
-        run: python scripts/check_pack.py examples/sample-pack
+        run: python scripts/book_skills.py validate examples/sample-pack --json
+      - name: Legacy compatibility validation
+        run: python scripts/check_pack.py examples/v1-sample-pack --legacy --json

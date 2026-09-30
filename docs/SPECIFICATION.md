@@ -1,96 +1,41 @@
-# Book Skills Creator specification
+# Pack and validation specification (2.0)
 
-This document defines the public behavior of the project.
+## Plan and pack contract
 
-## Purpose
+`book-skills plan <sources.json> <name> --output plan.json` creates a draft containing these top-level keys:
 
-Convert a selected book or document into a modular agent skill pack.
+| Key | Meaning |
+|---|---|
+| `schema_version`, `status` | `2.0`; `draft` until an agent completes the architecture, then `ready` |
+| `pack` | `name` (ASCII lowercase slug), `title`, `description` |
+| `sources` | Selected source IDs, paths, formats, byte counts, hashes, extraction methods, versions, and warnings |
+| `evidence` | Unit ID, source ID, kind, heading path, order, optional line range, length, hash; no raw text |
+| `extraction_gaps` | Skipped inputs and source extraction warnings |
+| `candidates` | Accepted, reference-only, or rejected proposals; rejected entries need reasons |
+| `atomic` | Focused capabilities |
+| `combo` | Orchestrated workflows and dependencies |
+| `routes` | Activation condition and target node |
+| `references` | Supporting knowledge and evidence IDs |
+| `conflicts`, `uncertainties` | Explicit unresolved source issues and limitations |
+| `overlaps`, `validation_risks` | Suspected overlap and risks requiring agent/human review |
+| `behavior_tests` | Inspectable routing cases for semantic review |
 
-The output is not a summary. The output is a practical pack with focused skills, combined workflows, routing rules, references, and validation notes.
+An atomic entry needs `id`, `title`, `description`, `mission`, `use_when`, nonempty `inputs`, `steps`, `output`, `constraints` (possibly empty), nonempty `evidence`, and `grounding` (`grounded` or `review`). A combo needs the same descriptive fields, at least two `dependencies`, a nonempty high-level `flow`, `output`, `evidence`, and `grounding`. A reference needs `id`, `title`, `content`, and `evidence`. The complete synthetic manifest at [`examples/sample-pack/pack.json`](../examples/sample-pack/pack.json) is an executable example.
 
-## Core idea
+Every generated atomic, combo, or reference unit must be linked from a candidate decision. Accepted candidates map to atomic/combo nodes, reference-only candidates map to reference nodes, and rejected candidates retain a reason. Each candidate cites evidence. This makes the decomposition decision inspectable without requiring an arbitrary skill count.
 
-One book can contain many reusable capabilities.
+IDs and generated names use ASCII lowercase letters, digits, and single hyphens, with a 64-character maximum. Unit IDs are unique across atomic, combo, and reference categories. Generated frontmatter names are `<pack-name>-<unit-id>`; router is `<pack-name>-router`. A generated pack needs at least one selected source and one atomic skill.
 
-The correct transformation is:
+Routes use `atomic:<id>`, `combo:<id>`, or `reference:<id>`. Combo dependencies use atomic or combo targets. Nested combos are permitted; cycles and self-dependencies are errors. The renderer writes exactly the declared units. References do not become skills.
 
-```text
-source -> extraction -> analysis -> plan -> map -> atomic skills -> combo skills -> router -> validation
-```
+Behavioral cases have `type` (`positive`, `negative`, `combo`, `reference`, `ambiguous`, or `unsupported`) and `request`. The first four also name a `target`. Validation verifies case shape and target existence; an agent or human judges the expected behavior.
 
-## Source selection
+## Deterministic validation
 
-The system processes only the source explicitly selected by the user.
+`validate` reports `PASS`, `PASS_WITH_WARNINGS`, or `FAIL`, plus independent `ERROR` and `WARNING` findings in `--json` mode. Errors include missing/invalid schema fields, invalid names or hashes, duplicate IDs, bad evidence/source references, broken dependencies or routes, cycles, orphan units, missing generated files, unlisted skills, file/manifest drift, invalid frontmatter, and broken local links. With `--extraction`, changed source/unit hashes or extraction methods are errors. Warnings include unresolved source conflicts, units marked for grounding review, suspicious mission overlap, copied atomic procedure text inside a combo, and 30-word contiguous verbatim reuse from extracted text. The overlap and copying checks are screening tools, not semantic verdicts. The JSON report gives counts for sources, skills, routes, grounding declarations, unresolved conflicts, graph issues, and copying/overlap warnings without combining them into a quality score.
 
-A folder or glob can be processed only when the user explicitly gives that folder or glob as input.
+Passing validation does not certify factual grounding, complete capability discovery, absence of all copying, or correct routing by every agent. Keep rejected candidates, conflicts, and uncertainties visible in the plan. Review the source evidence for each capability.
 
-The built-in extraction helper supports TXT, Markdown, and lightweight DOCX. Inspection may
-recognize additional formats, but recognition does not imply built-in extraction support.
+## Legacy packs
 
-## Skill types
-
-### Atomic skill
-
-A focused skill with one mission, one procedure, clear inputs, and a practical output.
-
-### Combo skill
-
-A workflow skill that orchestrates two or more atomic skills in a useful sequence.
-
-### Router skill
-
-The entry point of the generated pack. It decides whether the request should use an atomic skill, a combo skill, references, or a clarification step.
-
-## Planning requirement
-
-Before writing generated files, the agent must create a plan containing:
-
-- pack name;
-- source list;
-- extraction quality;
-- candidate atomic skills;
-- candidate combo skills;
-- router behavior;
-- rejected candidates;
-- risks and uncertainties.
-
-## Candidate filter
-
-A candidate becomes a skill only when it has:
-
-- a clear mission;
-- a repeatable procedure;
-- concrete user inputs;
-- a useful output;
-- enough source support;
-- low overlap with other skills.
-
-## Recommended output tree
-
-```text
-pack-name/
-  README.md
-  source_index.md
-  skill_map.md
-  validation.md
-  router/SKILL.md
-  atomic/name/SKILL.md
-  combo/name/SKILL.md
-  references/concepts.md
-  references/glossary.md
-  references/examples.md
-  references/anti_patterns.md
-  references/chapters/
-```
-
-## Validation checklist
-
-- Every skill has a valid SKILL.md.
-- Every atomic skill has one mission.
-- Combo skills orchestrate instead of duplicating.
-- Router can reach every generated skill.
-- References point back to the selected source.
-- Claims unsupported by the source are removed or marked uncertain.
-- Names are lowercase and hyphenated.
-- The skill map records rejected candidates and material uncertainties.
-- The final pack is useful in real tasks.
+A v1 pack without `pack.json` can still be checked with the explicit `validate --legacy` option for its basic file structure and frontmatter. It receives a `legacy-pack` warning because graph and provenance checks are unavailable. Without `--legacy`, a missing manifest is an error. Rebuild from a ready 2.0 plan for full validation.

@@ -1,31 +1,16 @@
 # Contributing
 
-Contributions should preserve the project's agent-neutral, source-grounded design.
+Keep changes focused on the book-to-capability transformation and its verifiable contracts. Use only original synthetic source fixtures or material you have the right to process. Never commit private documents, extracted workspace contents, credentials, or copyrighted book passages.
 
-## Before opening a pull request
+The Python core targets 3.10+ and uses the standard library. An added mandatory dependency needs a concrete correctness or maintenance case. Keep source extraction deterministic and semantic decisions in the agent workflow. When changing a format, schema, command, or validation rule, update the relevant docs and synthetic tests.
 
-1. Keep changes focused on one documented capability or correction.
-2. Process only synthetic fixtures or documents you have the right to use.
-3. Do not commit extracted books, private documents, credentials, or `.book_skills_work/`.
-4. Keep helper scripts compatible with the Python standard library unless a dependency is
-   explicitly justified.
-5. Run the relevant helper and validation commands from the repository root.
-
-For changes that affect generated packs, verify the sample pack:
+Before a pull request, run:
 
 ```bash
 python -m unittest discover -s tests
-python -m compileall -q scripts tests
-python scripts/check_pack.py examples/sample-pack
+python -m compileall -q book_skills scripts tests examples/build_sample.py
+python scripts/book_skills.py validate examples/sample-pack --json
+python scripts/book_skills.py validate examples/v1-sample-pack --legacy --json
 ```
 
-For Python changes, test both successful input and expected failure behavior. Update the
-public documentation when commands, outputs, supported formats, or limitations change.
-
-## Pull request scope
-
-- Keep public documentation user-facing; do not commit internal review logs or working notes.
-- Add third-party dependencies only when the standard library is insufficient and the tradeoff
-  is documented.
-- Preserve agent-neutral terminology and the open `SKILL.md` structure.
-- Keep examples synthetic and free of copyrighted or private source content.
+The v2 sample has one expected unresolved-conflict warning. The v1 sample has a `legacy-pack` warning. Neither warning should be silently removed by changing validator thresholds.
