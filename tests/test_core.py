@@ -638,7 +638,10 @@ class HardeningTests(unittest.TestCase):
 
             real_copytree = shutil.copytree
             def failing_copytree(src, dst, *args, **kwargs):
-                if Path(dst).name == "lantern-field-desk-intake-signal":
+                dst_path = Path(dst)
+                if dst_path.name == "lantern-field-desk-intake-signal":
+                    dst_path.mkdir(parents=True, exist_ok=True)
+                    (dst_path / "PARTIAL_RESIDUE.txt").write_text("partial copy before crash", encoding="utf-8")
                     raise RuntimeError("Simulated failure after first replacement")
                 return real_copytree(src, dst, *args, **kwargs)
 
@@ -647,7 +650,8 @@ class HardeningTests(unittest.TestCase):
                     install_pack(pack, target, force=True)
                 self.assertIn("Simulated failure after first replacement", str(cm.exception))
 
-            # Verify complete rollback: all pre-existing skills preserved with their exact content
+            # Verify partial residue was eliminated and all pre-existing skills restored intact
+            self.assertFalse((target / "lantern-field-desk-intake-signal" / "PARTIAL_RESIDUE.txt").exists())
             self.assertEqual(router_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING ROUTER CONTENT")
             self.assertEqual(signal_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING SIGNAL CONTENT")
             self.assertEqual(bundle_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING BUNDLE CONTENT")
@@ -664,7 +668,10 @@ class HardeningTests(unittest.TestCase):
 
             real_copytree = shutil.copytree
             def failing_copytree(src, dst, *args, **kwargs):
-                if Path(dst).name == "lantern-field-desk-intake-signal":
+                dst_path = Path(dst)
+                if dst_path.name == "lantern-field-desk-intake-signal":
+                    dst_path.mkdir(parents=True, exist_ok=True)
+                    (dst_path / "PARTIAL_RESIDUE.txt").write_text("partial copy before crash", encoding="utf-8")
                     raise RuntimeError("Simulated failure after first replacement")
                 return real_copytree(src, dst, *args, **kwargs)
 
@@ -672,12 +679,64 @@ class HardeningTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     install_pack(pack, target, force=False)
 
-            # Verify no partially installed skill directories remain in target
+            # Verify no completed or partially created skill directories remain in target
             self.assertFalse((target / "lantern-field-desk-router").exists())
             self.assertFalse((target / "lantern-field-desk-intake-signal").exists())
             self.assertFalse((target / "lantern-field-desk").exists())
-            backups = [p.name for p in target.iterdir() if p.name.startswith(".install_backup_")]
-            self.assertEqual(backups, [])
+            self.assertEqual(list(target.iterdir()), [])
+
+    def test_install_rollback_preserves_recoverable_backups_when_restore_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            result = install_pack(pack, target, force=False)
+            self.assertEqual(result["status"], "INSTALLED")
+
+            router_file = target / "lantern-field-desk-router" / "SKILL.md"
+            signal_file = target / "lantern-field-desk-intake-signal" / "SKILL.md"
+            bundle_file = target / "lantern-field-desk" / "SKILL.md"
+            router_file.write_text("V1 PRE-EXISTING ROUTER CONTENT", encoding="utf-8")
+            signal_file.write_text("V1 PRE-EXISTING SIGNAL CONTENT", encoding="utf-8")
+            bundle_file.write_text("V1 PRE-EXISTING BUNDLE CONTENT", encoding="utf-8")
+
+            real_copytree = shutil.copytree
+            real_move = shutil.move
+
+            def failing_copytree(src, dst, *args, **kwargs):
+                dst_path = Path(dst)
+                if dst_path.name == "lantern-field-desk-intake-signal":
+                    dst_path.mkdir(parents=True, exist_ok=True)
+                    (dst_path / "PARTIAL_RESIDUE.txt").write_text("partial copy before crash", encoding="utf-8")
+                    raise RuntimeError("Simulated copy failure")
+                return real_copytree(src, dst, *args, **kwargs)
+
+            def failing_restore_move(src, dst, *args, **kwargs):
+                src_path = Path(src)
+                dst_path = Path(dst)
+                if src_path.parent.name.startswith(".install_backup_") and dst_path.name == "lantern-field-desk-intake-signal":
+                    raise OSError("Simulated restore failure")
+                return real_move(src, dst, *args, **kwargs)
+
+            with patch("shutil.copytree", side_effect=failing_copytree), patch("shutil.move", side_effect=failing_restore_move):
+                with self.assertRaises(RuntimeError) as cm:
+                    install_pack(pack, target, force=True)
+                self.assertIn("rollback-incomplete", str(cm.exception))
+                self.assertIsInstance(cm.exception.__cause__, RuntimeError)
+                self.assertIn("Simulated copy failure", str(cm.exception.__cause__))
+
+            # Recoverable skills before and after the failed restore were still restored
+            self.assertEqual(router_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING ROUTER CONTENT")
+            self.assertEqual(bundle_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING BUNDLE CONTENT")
+            # Partial residue of the failed destination was cleaned
+            self.assertFalse((target / "lantern-field-desk-intake-signal" / "PARTIAL_RESIDUE.txt").exists())
+            # Unrestored backup was NOT deleted and remains intact inside .install_backup_*
+            backup_dirs = [p for p in target.iterdir() if p.name.startswith(".install_backup_")]
+            self.assertEqual(len(backup_dirs), 1)
+            preserved_backup = backup_dirs[0] / "lantern-field-desk-intake-signal" / "SKILL.md"
+            self.assertTrue(preserved_backup.is_file())
+            self.assertEqual(preserved_backup.read_text(encoding="utf-8"), "V1 PRE-EXISTING SIGNAL CONTENT")
 
     def test_install_transactional_preflight_no_partial_install(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -69,23 +70,20 @@ def _safe_remove(path: Path) -> None:
         try:
             path.unlink()
         except OSError:
-            try:
-                os.unlink(str(path))
-            except OSError:
-                pass
+            os.unlink(str(path))
     elif path.is_dir():
         def on_err(func, p, exc_info):
-            try:
+            os.chmod(p, 0o777)
+            func(p)
+        if sys.version_info >= (3, 12):
+            def on_exc(func, p, exc):
                 os.chmod(p, 0o777)
                 func(p)
-            except OSError:
-                pass
-        shutil.rmtree(path, onerror=on_err)
+            shutil.rmtree(path, onexc=on_exc)
+        else:
+            shutil.rmtree(path, onerror=on_err)
     elif path.exists():
-        try:
-            path.unlink()
-        except OSError:
-            pass
+        path.unlink()
 
 
 def frontmatter(name: str, description: str) -> str:
@@ -295,9 +293,8 @@ def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bo
         installed: list[str] = []
         backed_up: list[str] = []
         placed_new: list[str] = []
-        backup_tmp = tempfile.TemporaryDirectory(dir=target_dir, prefix=".install_backup_")
+        backup_root = Path(tempfile.mkdtemp(dir=target_dir, prefix=".install_backup_"))
         try:
-            backup_root = Path(backup_tmp.name)
             # Step A: back up any existing destination directories
             for s_name in all_skill_dirs:
                 dest = target_dir / s_name
@@ -310,8 +307,8 @@ def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bo
             for s_name in all_skill_dirs:
                 src = staging_root / s_name
                 dest = target_dir / s_name
-                shutil.copytree(src, dest)
                 placed_new.append(s_name)
+                shutil.copytree(src, dest)
                 installed.append(s_name)
 
             # Step C: if symlink mode, wire relative symlinks directly in target_dir with fallback
@@ -326,23 +323,51 @@ def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bo
                         if not ref_dest.is_dir():
                             raise OSError("Symlink is not a directory")
                     except (OSError, NotImplementedError):
-                        _safe_remove(ref_dest)
+                        if is_link(ref_dest) or ref_dest.exists():
+                            _safe_remove(ref_dest)
                         shutil.copytree(ref_dir, ref_dest)
-        except BaseException:
+
+            try:
+                _safe_remove(backup_root)
+            except OSError:
+                pass
+        except BaseException as exc:
             # Full rollback on any failure
+            rollback_errors: list[str] = []
             for s_name in placed_new:
-                _safe_remove(target_dir / s_name)
+                dest = target_dir / s_name
+                if dest.exists() or is_link(dest):
+                    try:
+                        _safe_remove(dest)
+                    except OSError as rm_exc:
+                        rollback_errors.append(f"cleanup {s_name}: {rm_exc}")
             for s_name in backed_up:
                 b_src = backup_root / s_name
                 dest = target_dir / s_name
                 if b_src.exists() or is_link(b_src):
-                    _safe_remove(dest)
-                    shutil.move(str(b_src), str(dest))
-            raise
-        finally:
+                    try:
+                        if dest.exists() or is_link(dest):
+                            _safe_remove(dest)
+                        if dest.exists() or is_link(dest):
+                            raise OSError(f"destination still exists: {dest}")
+                        shutil.move(str(b_src), str(dest))
+                    except Exception as restore_exc:
+                        rollback_errors.append(f"restore {s_name}: {restore_exc}")
+
             try:
-                backup_tmp.cleanup()
+                has_leftover_backups = backup_root.exists() and any(backup_root.iterdir())
             except OSError:
-                pass
+                has_leftover_backups = True
+
+            if not rollback_errors and not has_leftover_backups:
+                try:
+                    _safe_remove(backup_root)
+                except OSError:
+                    pass
+            elif isinstance(exc, Exception) and rollback_errors:
+                raise RuntimeError(
+                    f"rollback-incomplete: {'; '.join(rollback_errors)}; backups preserved in {backup_root.name}"
+                ) from exc
+            raise
 
     return {"status": "INSTALLED", "pack": pack_name, "target": str(target_dir), "mode": mode, "installed_skills": installed}
