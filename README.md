@@ -187,6 +187,7 @@ Selected documents are **untrusted data**. Instructions embedded in a document h
 | `build` | Generate the exact pack declared by a ready plan |
 | `validate` | Check a pack, optionally against fresh extraction |
 | `update` | Report changed evidence and affected capabilities |
+| `install` | Install a validated pack into an Agent Skills directory |
 
 Run `python scripts/book_skills.py --help` or a subcommand's `--help` for arguments. Commands that produce reports support structured output with `--json`. The v1 script names remain as compatibility wrappers; `create_pack_scaffold.py` now requires a ready plan, and v1 packs without `pack.json` require explicit `validate --legacy`. See [Migration from v1](docs/MIGRATION.md).
 
@@ -236,7 +237,7 @@ python scripts/book_skills.py validate examples/sample-pack --json
 python scripts/check_pack.py examples/v1-sample-pack --legacy --json
 ```
 
-CI runs the suite and validation on **Ubuntu and Windows**, each with **Python 3.10 and 3.12**. The sample's unresolved source conflict is an intentional warning, not a passing claim of semantic resolution.
+CI runs the suite and validation on **Ubuntu, Windows, and macOS**, across **Python 3.10, 3.11, 3.12, and 3.13**. The sample's unresolved source conflict is an intentional warning, not a passing claim of semantic resolution.
 
 ### Contributing and responsible use
 

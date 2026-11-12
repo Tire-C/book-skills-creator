@@ -2,26 +2,33 @@ name: tests
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
 
 jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.10", "3.12"]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Package installation
+        run: python -m pip install -e .
       - name: Unit tests
         run: python -m unittest discover -s tests
       - name: Bytecode compilation
         run: python -m compileall -q book_skills scripts tests examples/build_sample.py
+      - name: CLI preflight check
+        run: book-skills preflight --json
       - name: Sample pack validation
-        run: python scripts/book_skills.py validate examples/sample-pack --json
+        run: book-skills validate examples/sample-pack --json
+      - name: Sample pack installation
+        run: book-skills install examples/sample-pack --target test_installed_skills --json
       - name: Legacy compatibility validation
         run: python scripts/check_pack.py examples/v1-sample-pack --legacy --json

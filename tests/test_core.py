@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -17,9 +18,9 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from book_skills.discovery import Limits, discover  # noqa: E402
+from book_skills.discovery import Limits, discover, label  # noqa: E402
 from book_skills.extraction import extract_file, extract_selected, write_extraction  # noqa: E402
-from book_skills.pack import build, draft_plan, dump_json, slugify  # noqa: E402
+from book_skills.pack import build, draft_plan, dump_json, install_pack, slugify  # noqa: E402
 from book_skills.validation import validate_pack, validate_plan  # noqa: E402
 from examples.build_sample import make_plan  # noqa: E402
 
@@ -473,6 +474,376 @@ class PackTests(unittest.TestCase):
             affected = json.loads(result.stdout)["affected_units"]
             self.assertIn("reference:terms", affected)
             self.assertFalse(any(node.startswith("references:") for node in affected))
+
+
+class HardeningTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.extraction = extract_selected([str(ROOT / "examples/sources/field-manual.md"), str(ROOT / "examples/sources/field-errata.md")], ROOT / ".book_skills_work", Limits())
+        cls.plan = make_plan(cls.extraction)
+
+    def test_credential_in_plan_and_pack_is_rejected(self) -> None:
+        plan = copy.deepcopy(self.plan)
+        plan["atomic"][0]["mission"] += " ghp_12345678901234567890"
+        self.assertIn("credential-detected", codes(validate_plan(plan)))
+        with tempfile.TemporaryDirectory() as temporary:
+            pack = Path(temporary) / "pack"
+            build(self.plan, pack)
+            (pack / "references" / "terms.md").write_text("Secret: sk-abcdefghijklmnopqrstuvwxyz1234\n", encoding="utf-8")
+            self.assertIn("credential-detected", codes(validate_pack(pack)["issues"]))
+
+    def test_description_length_limit(self) -> None:
+        plan = copy.deepcopy(self.plan)
+        plan["atomic"][0]["description"] = "A" * 1025
+        self.assertIn("description-too-long", codes(validate_plan(plan)))
+        plan["atomic"][0]["description"] = "A" * 100
+        plan["pack"]["description"] = "B" * 1025
+        self.assertIn("description-too-long", codes(validate_plan(plan)))
+
+    def test_empty_link_destination_is_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            pack = Path(temporary) / "pack"
+            build(self.plan, pack)
+            (pack / "references" / "terms.md").write_text("# Terms\nSee [empty link]().\n", encoding="utf-8")
+            self.assertIn("broken-reference-link", codes(validate_pack(pack)["issues"]))
+
+    def test_html_pre_preserves_whitespace_and_newlines(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "code.html"
+            path.write_text("<html><body><pre>def test():\n    return 42</pre></body></html>", encoding="utf-8")
+            units = extract_file(path, Limits())["units"]
+            self.assertEqual(units[0]["kind"], "code")
+            self.assertIn("def test():\n    return 42", units[0]["text"])
+
+    def test_docx_heading_with_space_style(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            docx = Path(temporary) / "spaced_heading.docx"
+            ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xml = f'<w:document xmlns:w="{ns}"><w:body><w:p><w:pPr><w:pStyle w:val="Heading 1"/></w:pPr><w:r><w:t>Spaced Heading</w:t></w:r></w:p></w:body></w:document>'
+            with zipfile.ZipFile(docx, "w") as archive:
+                archive.writestr("word/document.xml", xml)
+            units = extract_file(docx, Limits())["units"]
+            self.assertEqual(units[0]["kind"], "heading")
+            self.assertEqual(units[0]["text"], "Spaced Heading")
+
+    def test_install_pack_to_agent_skills_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            data = json.loads(res.stdout)
+            self.assertEqual(data["status"], "INSTALLED")
+            self.assertIn("lantern-field-desk-router", data["installed_skills"])
+            self.assertIn("lantern-field-desk-intake-signal", data["installed_skills"])
+            self.assertTrue((target / "lantern-field-desk-router" / "SKILL.md").is_file())
+            self.assertTrue((target / "lantern-field-desk-router" / "references" / "terms.md").is_file())
+            self.assertTrue((target / "lantern-field-desk-intake-signal" / "SKILL.md").is_file())
+            self.assertTrue((target / "lantern-field-desk" / "SKILL.md").is_file())
+            fail = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(fail.returncode, 2)
+            force = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--force", "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(force.returncode, 0)
+
+    def test_bundle_frontmatter_matches_directory_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            bundle_text = (target / "lantern-field-desk" / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("name: lantern-field-desk\n", bundle_text)
+            self.assertNotIn("name: lantern-field-desk-router\n", bundle_text)
+            router_text = (target / "lantern-field-desk-router" / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("name: lantern-field-desk-router\n", router_text)
+
+    def test_install_force_refuses_to_delete_unmanaged_foreign_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+
+            foreign_file = target / "lantern-field-desk" / "user_notes.txt"
+            foreign_file.write_text("Private personal notes", encoding="utf-8")
+
+            force_run = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--force", "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(force_run.returncode, 2)
+            self.assertIn("target-has-unmanaged-files", force_run.stdout + force_run.stderr)
+            self.assertTrue(foreign_file.is_file())
+            self.assertEqual(foreign_file.read_text(encoding="utf-8"), "Private personal notes")
+
+    def test_install_force_refuses_to_delete_unmanaged_files_and_directories_in_references(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+
+            # 1. Foreign file inside router references
+            foreign_ref_file = target / "lantern-field-desk-router" / "references" / "foreign_ref.txt"
+            foreign_ref_file.write_text("Private reference note", encoding="utf-8")
+
+            # 2. Foreign directory inside router references with nested file
+            foreign_ref_dir = target / "lantern-field-desk-router" / "references" / "custom_sub"
+            foreign_ref_dir.mkdir()
+            foreign_nested = foreign_ref_dir / "nested.txt"
+            foreign_nested.write_text("Nested private info", encoding="utf-8")
+
+            # 3. Foreign directory inside bundle references
+            foreign_bundle_dir = target / "lantern-field-desk" / "references" / "bundle_sub"
+            foreign_bundle_dir.mkdir()
+
+            force_run = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--force", "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(force_run.returncode, 2)
+            self.assertIn("target-has-unmanaged-files", force_run.stdout + force_run.stderr)
+
+            # Verify every unmanaged file and directory was completely preserved
+            self.assertTrue(foreign_ref_file.is_file())
+            self.assertEqual(foreign_ref_file.read_text(encoding="utf-8"), "Private reference note")
+            self.assertTrue(foreign_ref_dir.is_dir())
+            self.assertTrue(foreign_nested.is_file())
+            self.assertEqual(foreign_nested.read_text(encoding="utf-8"), "Nested private info")
+            self.assertTrue(foreign_bundle_dir.is_dir())
+
+    def test_install_rollback_on_simulated_failure_during_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            # First clean install
+            result = install_pack(pack, target, force=False)
+            self.assertEqual(result["status"], "INSTALLED")
+
+            # Place identifying markers into pre-existing skills
+            router_file = target / "lantern-field-desk-router" / "SKILL.md"
+            signal_file = target / "lantern-field-desk-intake-signal" / "SKILL.md"
+            bundle_file = target / "lantern-field-desk" / "SKILL.md"
+            router_file.write_text("V1 PRE-EXISTING ROUTER CONTENT", encoding="utf-8")
+            signal_file.write_text("V1 PRE-EXISTING SIGNAL CONTENT", encoding="utf-8")
+            bundle_file.write_text("V1 PRE-EXISTING BUNDLE CONTENT", encoding="utf-8")
+
+            real_copytree = shutil.copytree
+            def failing_copytree(src, dst, *args, **kwargs):
+                dst_path = Path(dst)
+                if dst_path.name == "lantern-field-desk-intake-signal":
+                    dst_path.mkdir(parents=True, exist_ok=True)
+                    (dst_path / "PARTIAL_RESIDUE.txt").write_text("partial copy before crash", encoding="utf-8")
+                    raise RuntimeError("Simulated failure after first replacement")
+                return real_copytree(src, dst, *args, **kwargs)
+
+            with patch("shutil.copytree", side_effect=failing_copytree):
+                with self.assertRaises(RuntimeError) as cm:
+                    install_pack(pack, target, force=True)
+                self.assertIn("Simulated failure after first replacement", str(cm.exception))
+
+            # Verify partial residue was eliminated and all pre-existing skills restored intact
+            self.assertFalse((target / "lantern-field-desk-intake-signal" / "PARTIAL_RESIDUE.txt").exists())
+            self.assertEqual(router_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING ROUTER CONTENT")
+            self.assertEqual(signal_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING SIGNAL CONTENT")
+            self.assertEqual(bundle_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING BUNDLE CONTENT")
+            # Verify no temporary backup directories remain in target
+            backups = [p.name for p in target.iterdir() if p.name.startswith(".install_backup_")]
+            self.assertEqual(backups, [])
+
+    def test_install_rollback_on_simulated_failure_during_fresh_install(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+
+            real_copytree = shutil.copytree
+            def failing_copytree(src, dst, *args, **kwargs):
+                dst_path = Path(dst)
+                if dst_path.name == "lantern-field-desk-intake-signal":
+                    dst_path.mkdir(parents=True, exist_ok=True)
+                    (dst_path / "PARTIAL_RESIDUE.txt").write_text("partial copy before crash", encoding="utf-8")
+                    raise RuntimeError("Simulated failure after first replacement")
+                return real_copytree(src, dst, *args, **kwargs)
+
+            with patch("shutil.copytree", side_effect=failing_copytree):
+                with self.assertRaises(RuntimeError):
+                    install_pack(pack, target, force=False)
+
+            # Verify no completed or partially created skill directories remain in target
+            self.assertFalse((target / "lantern-field-desk-router").exists())
+            self.assertFalse((target / "lantern-field-desk-intake-signal").exists())
+            self.assertFalse((target / "lantern-field-desk").exists())
+            self.assertEqual(list(target.iterdir()), [])
+
+    def test_install_rollback_preserves_recoverable_backups_when_restore_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            result = install_pack(pack, target, force=False)
+            self.assertEqual(result["status"], "INSTALLED")
+
+            router_file = target / "lantern-field-desk-router" / "SKILL.md"
+            signal_file = target / "lantern-field-desk-intake-signal" / "SKILL.md"
+            bundle_file = target / "lantern-field-desk" / "SKILL.md"
+            router_file.write_text("V1 PRE-EXISTING ROUTER CONTENT", encoding="utf-8")
+            signal_file.write_text("V1 PRE-EXISTING SIGNAL CONTENT", encoding="utf-8")
+            bundle_file.write_text("V1 PRE-EXISTING BUNDLE CONTENT", encoding="utf-8")
+
+            real_copytree = shutil.copytree
+            real_move = shutil.move
+
+            def failing_copytree(src, dst, *args, **kwargs):
+                dst_path = Path(dst)
+                if dst_path.name == "lantern-field-desk-intake-signal":
+                    dst_path.mkdir(parents=True, exist_ok=True)
+                    (dst_path / "PARTIAL_RESIDUE.txt").write_text("partial copy before crash", encoding="utf-8")
+                    raise RuntimeError("Simulated copy failure")
+                return real_copytree(src, dst, *args, **kwargs)
+
+            def failing_restore_move(src, dst, *args, **kwargs):
+                src_path = Path(src)
+                dst_path = Path(dst)
+                if src_path.parent.name.startswith(".install_backup_") and dst_path.name == "lantern-field-desk-intake-signal":
+                    raise OSError("Simulated restore failure")
+                return real_move(src, dst, *args, **kwargs)
+
+            with patch("shutil.copytree", side_effect=failing_copytree), patch("shutil.move", side_effect=failing_restore_move):
+                with self.assertRaises(RuntimeError) as cm:
+                    install_pack(pack, target, force=True)
+                self.assertIn("rollback-incomplete", str(cm.exception))
+                self.assertIsInstance(cm.exception.__cause__, RuntimeError)
+                self.assertIn("Simulated copy failure", str(cm.exception.__cause__))
+
+            # Recoverable skills before and after the failed restore were still restored
+            self.assertEqual(router_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING ROUTER CONTENT")
+            self.assertEqual(bundle_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING BUNDLE CONTENT")
+            # Partial residue of the failed destination was cleaned
+            self.assertFalse((target / "lantern-field-desk-intake-signal" / "PARTIAL_RESIDUE.txt").exists())
+            # Unrestored backup was NOT deleted and remains intact inside .install_backup_*
+            backup_dirs = [p for p in target.iterdir() if p.name.startswith(".install_backup_")]
+            self.assertEqual(len(backup_dirs), 1)
+            preserved_backup = backup_dirs[0] / "lantern-field-desk-intake-signal" / "SKILL.md"
+            self.assertTrue(preserved_backup.is_file())
+            self.assertEqual(preserved_backup.read_text(encoding="utf-8"), "V1 PRE-EXISTING SIGNAL CONTENT")
+
+    def test_install_transactional_preflight_no_partial_install(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            conflict_dir = target / "lantern-field-desk-intake-signal"
+            conflict_dir.mkdir(parents=True)
+            (conflict_dir / "SKILL.md").write_text("existing", encoding="utf-8")
+
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 2)
+            self.assertIn("target-exists", res.stdout + res.stderr)
+            self.assertFalse((target / "lantern-field-desk-router").exists())
+            self.assertFalse((target / "lantern-field-desk").exists())
+
+    def test_install_relative_symlinks_remain_valid_after_move(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            probe_sub = root / "probe_sub"
+            probe_sub.mkdir()
+            probe_target = root / "probe_target"
+            probe_target.mkdir()
+            probe_link = probe_sub / "probe_link"
+            try:
+                probe_link.symlink_to(Path("..") / "probe_target", target_is_directory=True)
+                if not probe_link.is_dir():
+                    raise OSError("Relative directory symlinks not supported on this platform")
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"Symbolic links are unavailable: {exc}")
+
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--mode", "symlink", "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            ref_dir = target / "lantern-field-desk-router" / "references"
+            self.assertTrue(ref_dir.is_dir())
+            self.assertTrue((ref_dir / "terms.md").is_file())
+            moved_target = root / "moved_skills"
+            target.rename(moved_target)
+            moved_ref = moved_target / "lantern-field-desk-router" / "references" / "terms.md"
+            self.assertTrue(moved_ref.is_file())
+            self.assertIn("Desk terms", moved_ref.read_text(encoding="utf-8"))
+
+    def test_path_sanitization_and_secret_detection(self) -> None:
+        p1 = Path("/Users/SecretUser/documents/file.txt")
+        lbl1 = label(p1)
+        self.assertNotIn("SecretUser", lbl1)
+        self.assertTrue(lbl1.startswith("~") or "<user>" in lbl1)
+
+        p2 = Path("C:/Users/SecretUser/documents/file.txt")
+        lbl2 = label(p2)
+        self.assertFalse(lbl2.startswith("C:"))
+        self.assertNotIn("SecretUser", lbl2)
+
+        plan = copy.deepcopy(self.plan)
+        plan["sources"][0]["path"] = "/Users/SecretUser/private/doc.md"
+        issues = validate_plan(plan)
+        self.assertIn("local-user-path", codes(issues))
+
+        plan_sec = copy.deepcopy(self.plan)
+        plan_sec["sources"][0]["method"] = "bearer 1234567890123456789012345"
+        self.assertIn("credential-detected", codes(validate_plan(plan_sec)))
+
+        plan_key = copy.deepcopy(self.plan)
+        plan_key["atomic"][0]["mission"] = "api_key = 'abcdef1234567890abcdef'"
+        self.assertIn("credential-detected", codes(validate_plan(plan_key)))
+
+    def test_agent_skills_loader_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+
+            discovered_skills = [p for p in target.iterdir() if p.is_dir() and (p / "SKILL.md").is_file()]
+            self.assertGreaterEqual(len(discovered_skills), 3)
+
+            name_slug_re = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+            frontmatter_re = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+
+            for skill_dir in discovered_skills:
+                dir_name = skill_dir.name
+                self.assertLessEqual(len(dir_name), 64)
+                self.assertRegex(dir_name, name_slug_re)
+
+                content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+                match = frontmatter_re.match(content)
+                self.assertIsNotNone(match, f"Missing YAML frontmatter in {skill_dir}")
+
+                fm_text = match.group(1)
+                name_match = re.search(r"^name:\s*([^\s]+)", fm_text, re.MULTILINE)
+                self.assertIsNotNone(name_match, f"Missing name in {skill_dir}/SKILL.md")
+                self.assertEqual(name_match.group(1), dir_name, f"Frontmatter name must match directory name in {skill_dir}")
+
+                desc_match = re.search(r"^description:\s*(.+)", fm_text, re.MULTILINE)
+                self.assertIsNotNone(desc_match, f"Missing description in {skill_dir}/SKILL.md")
+                desc_val = json.loads(desc_match.group(1).strip())
+                self.assertTrue(len(desc_val) > 0)
+                self.assertLessEqual(len(desc_val), 1024)
 
 
 if __name__ == "__main__":

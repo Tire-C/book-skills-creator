@@ -127,7 +127,9 @@ def blocks_markdown(text: str) -> list[dict]:
             kind = "table"
         else:
             part = []
-            while i < len(lines) and lines[i].strip() and not re.match(r"^#{1,6}\s+|^\s*(```|~~~)", lines[i]):
+            while i < len(lines) and lines[i].strip() and not re.match(r"^#{1,6}\s+|^\s*(```|~~~)|^\s*(?:[-*+]\s+|\d+[.)]\s+)", lines[i]):
+                if "|" in lines[i] and i + 1 < len(lines) and re.match(r"^\s*\|?\s*:?-{3,}", lines[i + 1]):
+                    break
                 part.append(lines[i]); i += 1
             kind = "paragraph"
         blocks.append({"kind": kind, "text": "\n".join(part), "line_start": start, "line_end": i})
@@ -144,7 +146,7 @@ class StructuralHTML(HTMLParser):
         self.buffer: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in {"script", "style", "nav"}:
+        if tag in {"script", "style", "nav", "noscript", "iframe"}:
             self.hidden += 1
         if self.hidden:
             return
@@ -157,7 +159,7 @@ class StructuralHTML(HTMLParser):
                 self.buffer.append("\n" if tag == "br" else " | ")
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in {"script", "style", "nav"} and self.hidden:
+        if tag in {"script", "style", "nav", "noscript", "iframe"} and self.hidden:
             self.hidden -= 1
             return
         if self.hidden or not self.active:
@@ -165,7 +167,10 @@ class StructuralHTML(HTMLParser):
         if tag not in {"br", "img", "hr", "meta", "link", "input"}:
             self.depth -= 1
         if tag == self.active or self.depth <= 0:
-            value = " ".join("".join(self.buffer).split())
+            if self.active == "pre":
+                value = "".join(self.buffer).replace("\r\n", "\n").replace("\r", "\n").strip()
+            else:
+                value = " ".join("".join(self.buffer).split())
             if value:
                 kind = "heading" if re.fullmatch(r"h[1-6]", self.active) else ("table" if self.active == "tr" else "list" if self.active == "li" else "code" if self.active == "pre" else "paragraph")
                 self.blocks.append({"kind": kind, "text": value, "level": int(self.active[1]) if kind == "heading" else None})
@@ -211,7 +216,7 @@ def blocks_docx(path: Path, limits: Limits) -> list[dict]:
                 continue
             style = node.find("./" + W + "pPr/" + W + "pStyle")
             name = style.get(W + "val", "") if style is not None else ""
-            heading = re.fullmatch(r"Heading([1-6])", name, re.IGNORECASE)
+            heading = re.fullmatch(r"Heading\s*([1-6])", name, re.IGNORECASE)
             blocks.append({"kind": "heading" if heading else "paragraph", "text": value, "level": int(heading.group(1)) if heading else None})
         elif node.tag == W + "tbl":
             rows = []
@@ -262,7 +267,13 @@ def blocks_pdf(path: Path, limits: Limits) -> list[dict]:
         process = subprocess.Popen([command, "-layout", str(path), "-"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except OSError as exc:
         raise ValueError("pdftotext-failed") from exc
-    timer = threading.Timer(60, process.kill)
+    timed_out = False
+    def kill_on_timeout() -> None:
+        nonlocal timed_out
+        timed_out = True
+        process.kill()
+
+    timer = threading.Timer(60, kill_on_timeout)
     timer.daemon = True
     timer.start()
     try:
@@ -277,6 +288,8 @@ def blocks_pdf(path: Path, limits: Limits) -> list[dict]:
         timer.cancel()
         if process.stdout is not None:
             process.stdout.close()
+    if timed_out:
+        raise ValueError("pdftotext-timeout")
     if process.returncode:
         raise ValueError("pdftotext-failed")
     text = data.decode("utf-8", "replace")

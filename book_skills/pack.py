@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import sys
+import tempfile
 from pathlib import Path
 
 from .discovery import is_link
@@ -59,6 +63,27 @@ def linked_within(root: Path, target: Path) -> bool:
         if cursor == root:
             return False
         cursor = cursor.parent
+
+
+def _safe_remove(path: Path) -> None:
+    if is_link(path):
+        try:
+            path.unlink()
+        except OSError:
+            os.unlink(str(path))
+    elif path.is_dir():
+        def on_err(func, p, exc_info):
+            os.chmod(p, 0o777)
+            func(p)
+        if sys.version_info >= (3, 12):
+            def on_exc(func, p, exc):
+                os.chmod(p, 0o777)
+                func(p)
+            shutil.rmtree(path, onexc=on_exc)
+        else:
+            shutil.rmtree(path, onerror=on_err)
+    elif path.exists():
+        path.unlink()
 
 
 def frontmatter(name: str, description: str) -> str:
@@ -127,7 +152,7 @@ def render_files(plan: dict) -> dict[str, str]:
     map_lines.extend(f"- {item}\n" for item in plan["uncertainties"])
     map_lines.extend(f"- Validation risk: {item}\n" for item in plan["validation_risks"])
     files["skill_map.md"] = "".join(map_lines)
-    files["validation.md"] = "# Validation\n\nRun `python scripts/check_pack.py <pack-path> --json` for the current deterministic report. Review semantic grounding, overlap, conflicts, and behavioral cases separately.\n"
+    files["validation.md"] = "# Validation\n\nRun `book-skills validate <pack-path> --json` (or `python scripts/book_skills.py validate <pack-path> --json`) for the current deterministic report. Review semantic grounding, overlap, conflicts, and behavioral cases separately.\n"
     return files
 
 
@@ -151,3 +176,198 @@ def build(plan: dict, output: Path, overwrite: bool = False) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
     (output / "pack.json").write_text(dump_json(plan), encoding="utf-8")
+
+
+def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bool = False) -> dict:
+    from .validation import validate_pack
+    validation = validate_pack(pack_dir)
+    if validation["errors"] > 0:
+        raise ValueError(f"cannot-install-invalid-pack: {validation['errors']} errors found during validation")
+    plan = load_json(pack_dir / "pack.json")
+    pack_name = plan["pack"]["name"]
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    atomic_names = [f"{pack_name}-{u['id']}" for u in plan.get("atomic", [])]
+    combo_names = [f"{pack_name}-{u['id']}" for u in plan.get("combo", [])]
+    all_skill_dirs = [f"{pack_name}-router", *atomic_names, *combo_names, pack_name]
+
+    ref_dir = pack_dir / "references"
+
+    # Preflight check: prevent partial install and protect foreign unmanaged files and directories
+    conflicts: list[str] = []
+    for s_name in all_skill_dirs:
+        dest = target_dir / s_name
+        if dest.exists() or is_link(dest):
+            conflicts.append(s_name)
+            if is_link(dest):
+                raise ValueError(f"symlink-target: {s_name}")
+            if force:
+                if s_name == pack_name:
+                    expected_files = {p.relative_to(pack_dir).as_posix() for p in pack_dir.rglob("*") if p.is_file()} | {"pack.json", "SKILL.md"} | set(render_files(plan))
+                    expected_dirs = {p.relative_to(pack_dir).as_posix() for p in pack_dir.rglob("*") if p.is_dir()}
+                else:
+                    expected_files = {"SKILL.md"}
+                    expected_dirs = set()
+                    if ref_dir.is_dir():
+                        expected_dirs.add("references")
+                        for p in ref_dir.rglob("*"):
+                            rel_ref = f"references/{p.relative_to(ref_dir).as_posix()}"
+                            if p.is_file():
+                                expected_files.add(rel_ref)
+                            elif p.is_dir():
+                                expected_dirs.add(rel_ref)
+
+                for f_rel in list(expected_files):
+                    cur = Path(f_rel).parent
+                    while cur != Path("."):
+                        expected_dirs.add(cur.as_posix())
+                        cur = cur.parent
+
+                unmanaged: list[str] = []
+                for p in dest.rglob("*"):
+                    rel = p.relative_to(dest).as_posix()
+                    if is_link(p):
+                        if s_name != pack_name and rel == "references":
+                            try:
+                                raw_target = os.readlink(str(p))
+                                expected_rel = (Path("..") / pack_name / "references").as_posix()
+                                if Path(raw_target).as_posix() != expected_rel:
+                                    try:
+                                        if Path(raw_target).resolve() != (dest.parent / pack_name / "references").resolve():
+                                            unmanaged.append(f"{rel} -> {raw_target}")
+                                    except OSError:
+                                        unmanaged.append(f"{rel} -> {raw_target}")
+                            except OSError:
+                                unmanaged.append(rel)
+                        else:
+                            unmanaged.append(rel)
+                    elif p.is_file():
+                        if rel not in expected_files:
+                            unmanaged.append(rel)
+                    elif p.is_dir():
+                        if rel not in expected_dirs:
+                            unmanaged.append(rel)
+
+                if unmanaged:
+                    raise ValueError(f"target-has-unmanaged-files: {s_name} contains foreign files or directories; refusing to delete with --force")
+
+    if conflicts and not force:
+        raise ValueError(f"target-exists: {', '.join(sorted(conflicts))}; use --force to overwrite")
+
+    # Transactional staging: build everything in a temporary directory first
+    with tempfile.TemporaryDirectory() as staging_tmp:
+        staging_root = Path(staging_tmp)
+
+        # 1. Stage bundle first so relative symlinks have a destination target
+        bundle_dest = staging_root / pack_name
+        shutil.copytree(pack_dir, bundle_dest)
+        bundle_desc = plan["pack"].get("description") or f"Route requests to capabilities in {plan['pack']['title']}."
+        bundle_frontmatter = frontmatter(pack_name, bundle_desc)
+        router_skill = (pack_dir / "router" / "SKILL.md").read_text(encoding="utf-8")
+        body = router_skill.split("---\n\n", 1)[1] if "---\n\n" in router_skill else router_skill
+        (bundle_dest / "SKILL.md").write_text(bundle_frontmatter + body, encoding="utf-8")
+
+        def place_skill(skill_name: str, skill_content: str, references_dir: Path | None) -> None:
+            dest = staging_root / skill_name
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / "SKILL.md").write_text(skill_content, encoding="utf-8")
+            if mode != "symlink" and references_dir and references_dir.is_dir():
+                shutil.copytree(references_dir, dest / "references")
+
+        # 2. Stage router
+        place_skill(f"{pack_name}-router", router_skill, ref_dir)
+
+        # 3. Stage atomic skills
+        for unit in plan.get("atomic", []):
+            uid = unit["id"]
+            atomic_skill = (pack_dir / "atomic" / uid / "SKILL.md").read_text(encoding="utf-8")
+            place_skill(f"{pack_name}-{uid}", atomic_skill, ref_dir)
+
+        # 4. Stage combo skills
+        for unit in plan.get("combo", []):
+            uid = unit["id"]
+            combo_skill = (pack_dir / "combo" / uid / "SKILL.md").read_text(encoding="utf-8")
+            place_skill(f"{pack_name}-{uid}", combo_skill, ref_dir)
+
+        # 5. Atomic commit from staging to target_dir with full transactional rollback
+        installed: list[str] = []
+        backed_up: list[str] = []
+        placed_new: list[str] = []
+        backup_root = Path(tempfile.mkdtemp(dir=target_dir, prefix=".install_backup_"))
+        try:
+            # Step A: back up any existing destination directories
+            for s_name in all_skill_dirs:
+                dest = target_dir / s_name
+                if dest.exists() or is_link(dest):
+                    b_dest = backup_root / s_name
+                    shutil.move(str(dest), str(b_dest))
+                    backed_up.append(s_name)
+
+            # Step B: copy staged skills into target_dir
+            for s_name in all_skill_dirs:
+                src = staging_root / s_name
+                dest = target_dir / s_name
+                placed_new.append(s_name)
+                shutil.copytree(src, dest)
+                installed.append(s_name)
+
+            # Step C: if symlink mode, wire relative symlinks directly in target_dir with fallback
+            if mode == "symlink" and ref_dir and ref_dir.is_dir():
+                for s_name in all_skill_dirs:
+                    if s_name == pack_name:
+                        continue
+                    ref_dest = target_dir / s_name / "references"
+                    rel_target = Path("..") / pack_name / "references"
+                    try:
+                        ref_dest.symlink_to(rel_target, target_is_directory=True)
+                        if not ref_dest.is_dir():
+                            raise OSError("Symlink is not a directory")
+                    except (OSError, NotImplementedError):
+                        if is_link(ref_dest) or ref_dest.exists():
+                            _safe_remove(ref_dest)
+                        shutil.copytree(ref_dir, ref_dest)
+
+            try:
+                _safe_remove(backup_root)
+            except OSError:
+                pass
+        except BaseException as exc:
+            # Full rollback on any failure
+            rollback_errors: list[str] = []
+            for s_name in placed_new:
+                dest = target_dir / s_name
+                if dest.exists() or is_link(dest):
+                    try:
+                        _safe_remove(dest)
+                    except OSError as rm_exc:
+                        rollback_errors.append(f"cleanup {s_name}: {rm_exc}")
+            for s_name in backed_up:
+                b_src = backup_root / s_name
+                dest = target_dir / s_name
+                if b_src.exists() or is_link(b_src):
+                    try:
+                        if dest.exists() or is_link(dest):
+                            _safe_remove(dest)
+                        if dest.exists() or is_link(dest):
+                            raise OSError(f"destination still exists: {dest}")
+                        shutil.move(str(b_src), str(dest))
+                    except Exception as restore_exc:
+                        rollback_errors.append(f"restore {s_name}: {restore_exc}")
+
+            try:
+                has_leftover_backups = backup_root.exists() and any(backup_root.iterdir())
+            except OSError:
+                has_leftover_backups = True
+
+            if not rollback_errors and not has_leftover_backups:
+                try:
+                    _safe_remove(backup_root)
+                except OSError:
+                    pass
+            elif isinstance(exc, Exception) and rollback_errors:
+                raise RuntimeError(
+                    f"rollback-incomplete: {'; '.join(rollback_errors)}; backups preserved in {backup_root.name}"
+                ) from exc
+            raise
+
+    return {"status": "INSTALLED", "pack": pack_name, "target": str(target_dir), "mode": mode, "installed_skills": installed}
