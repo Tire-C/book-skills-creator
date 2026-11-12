@@ -12,7 +12,7 @@
 
 **A book is not one capability.** A manual may contain a diagnostic method, a decision framework, an exception procedure, a checklist, and terminology. Book Skills Creator helps an agent discover those reusable parts in **explicitly selected sources** and assemble a modular capability network: focused **Atomic Skills**, orchestrating **Combo Skills**, a **Router**, and supporting **References**. The local Python core preserves evidence and checks the pack's structure; the agent supplies the semantic judgment.
 
-Book Skills Creator **v2.0.0** is the current stable release. It is local-first, agent-neutral, and built around the open `SKILL.md` style of Agent Skills. Its Python core uses the standard library and requires no API key, cloud service, or vector database.
+Book Skills Creator **v2.1.0** is the current stable release. It is local-first, agent-neutral, and built around the open `SKILL.md` style of Agent Skills. Its Python core uses the standard library and requires no API key, cloud service, or vector database.
 
 ## Source structure is not capability structure
 

@@ -6,6 +6,54 @@ Public releases follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-13
+
+### Added
+
+- Installable Python package configuration (`pyproject.toml`) providing the `book-skills`
+  console entry point and `python -m book_skills` module execution from any working directory.
+- New `book-skills install` subcommand and `scripts/install_pack.py` compatibility wrapper to
+  install validated packs into standard Agent Skills directories (`<pack>-router`,
+  `<pack>-<unit-id>`, and bundle `<pack>`) with matching YAML frontmatter `name:` metadata and
+  resolved `references/` directories, supporting `--mode copy|symlink` and `--force`.
+- Cross-platform GitHub Actions CI matrix running across `ubuntu-latest`, `windows-latest`, and
+  `macos-latest` on Python 3.10, 3.11, 3.12, and 3.13, plus Python 3.13 package classifier.
+- Regression test suite expanded to 58 tests covering Agent Skills loader contracts, bundle
+  frontmatter consistency, `--force` unmanaged-file protection, partial-install rollback,
+  relative symlink preservation, secret detection, path sanitization, and extractor edge cases.
+
+### Changed
+
+- Updated `SKILL.md`, `README.md`, `docs/SETUP.md`, and `examples/sample-pack/validation.md` to
+  document editable installation (`pip install -e .`), the `book-skills` CLI, and `install`.
+- Improved source extraction fidelity for Markdown list/table paragraph breaks, HTML `noscript`
+  and `iframe` filtering, `<pre>` whitespace/newline preservation, DOCX spaced `Heading <N>`
+  styles, and explicit `pdftotext-timeout` reporting.
+- Preserved v1 legacy pack compatibility (`validate --legacy` and `scripts/check_pack.py`) and
+  v2.0 `pack.json` schema (`SCHEMA_VERSION = "2.0"`).
+
+### Fixed
+
+- Enforced Agent Skills specification compliance for `description` length (max 1024 characters),
+  non-empty Markdown link destinations, and alignment between installed directory names and
+  `SKILL.md` frontmatter `name:` values.
+- Implemented preflight validation and transactional backup/rollback in `install_pack` so failed
+  or partially copied installations restore previous destinations and preserve unrestored backups
+  if a restore step fails.
+- Wired relative symlinks directly in destination directories with cross-platform privilege
+  probing and clean fallback messaging when OS symlink creation is unavailable (such as
+  unprivileged Windows environments).
+- Exempted macOS system root symlinks (`/var`, `/tmp`, `/etc`) during ancestor symlink checks.
+
+### Security
+
+- Added secret/credential pattern detection (`credential-detected`) across plans, manifests, and
+  generated/installed files.
+- Added privacy-preserving path redaction (`label()`) across POSIX and Windows user directories
+  and `local-user-path` validation warnings for unredacted source paths.
+- Prevented `install --force` from deleting unmanaged foreign files or directories, including
+  inside `references/`.
+
 ## [2.0.0] - 2026-09-30
 
 ### Added
