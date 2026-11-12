@@ -7,6 +7,7 @@ import itertools
 import os
 import re
 import stat
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -89,7 +90,8 @@ def is_link(path: Path) -> bool:
 
 def has_symlink_ancestor(path: Path) -> bool:
     absolute = path.absolute()
-    return any(is_link(parent) for parent in (absolute, *absolute.parents))
+    system_roots = {Path("/var"), Path("/tmp"), Path("/etc")} if sys.platform == "darwin" else set()
+    return any(is_link(parent) for parent in (absolute, *absolute.parents) if parent not in system_roots)
 
 
 def walk_files(selected: Path, output: Path, limits: Limits, skipped: list[dict[str, str]]):

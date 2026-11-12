@@ -602,12 +602,15 @@ class HardeningTests(unittest.TestCase):
     def test_install_relative_symlinks_remain_valid_after_move(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            probe_sub = root / "probe_sub"
+            probe_sub.mkdir()
             probe_target = root / "probe_target"
             probe_target.mkdir()
-            probe_link = root / "probe_link"
+            probe_link = probe_sub / "probe_link"
             try:
-                probe_link.symlink_to(probe_target, target_is_directory=True)
-                probe_link.stat()
+                probe_link.symlink_to(Path("..") / "probe_target", target_is_directory=True)
+                if not probe_link.is_dir():
+                    raise OSError("Relative directory symlinks not supported on this platform")
             except (NotImplementedError, OSError) as exc:
                 self.skipTest(f"Symbolic links are unavailable: {exc}")
 
