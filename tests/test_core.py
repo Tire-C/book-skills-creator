@@ -475,5 +475,78 @@ class PackTests(unittest.TestCase):
             self.assertFalse(any(node.startswith("references:") for node in affected))
 
 
+class HardeningTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.extraction = extract_selected([str(ROOT / "examples/sources/field-manual.md"), str(ROOT / "examples/sources/field-errata.md")], ROOT / ".book_skills_work", Limits())
+        cls.plan = make_plan(cls.extraction)
+
+    def test_credential_in_plan_and_pack_is_rejected(self) -> None:
+        plan = copy.deepcopy(self.plan)
+        plan["atomic"][0]["mission"] += " ghp_12345678901234567890"
+        self.assertIn("credential-detected", codes(validate_plan(plan)))
+        with tempfile.TemporaryDirectory() as temporary:
+            pack = Path(temporary) / "pack"
+            build(self.plan, pack)
+            (pack / "references" / "terms.md").write_text("Secret: sk-abcdefghijklmnopqrstuvwxyz1234\n", encoding="utf-8")
+            self.assertIn("credential-detected", codes(validate_pack(pack)["issues"]))
+
+    def test_description_length_limit(self) -> None:
+        plan = copy.deepcopy(self.plan)
+        plan["atomic"][0]["description"] = "A" * 1025
+        self.assertIn("description-too-long", codes(validate_plan(plan)))
+        plan["atomic"][0]["description"] = "A" * 100
+        plan["pack"]["description"] = "B" * 1025
+        self.assertIn("description-too-long", codes(validate_plan(plan)))
+
+    def test_empty_link_destination_is_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            pack = Path(temporary) / "pack"
+            build(self.plan, pack)
+            (pack / "references" / "terms.md").write_text("# Terms\nSee [empty link]().\n", encoding="utf-8")
+            self.assertIn("broken-reference-link", codes(validate_pack(pack)["issues"]))
+
+    def test_html_pre_preserves_whitespace_and_newlines(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "code.html"
+            path.write_text("<html><body><pre>def test():\n    return 42</pre></body></html>", encoding="utf-8")
+            units = extract_file(path, Limits())["units"]
+            self.assertEqual(units[0]["kind"], "code")
+            self.assertIn("def test():\n    return 42", units[0]["text"])
+
+    def test_docx_heading_with_space_style(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            docx = Path(temporary) / "spaced_heading.docx"
+            ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xml = f'<w:document xmlns:w="{ns}"><w:body><w:p><w:pPr><w:pStyle w:val="Heading 1"/></w:pPr><w:r><w:t>Spaced Heading</w:t></w:r></w:p></w:body></w:document>'
+            with zipfile.ZipFile(docx, "w") as archive:
+                archive.writestr("word/document.xml", xml)
+            units = extract_file(docx, Limits())["units"]
+            self.assertEqual(units[0]["kind"], "heading")
+            self.assertEqual(units[0]["text"], "Spaced Heading")
+
+    def test_install_pack_to_agent_skills_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            data = json.loads(res.stdout)
+            self.assertEqual(data["status"], "INSTALLED")
+            self.assertIn("lantern-field-desk-router", data["installed_skills"])
+            self.assertIn("lantern-field-desk-intake-signal", data["installed_skills"])
+            self.assertTrue((target / "lantern-field-desk-router" / "SKILL.md").is_file())
+            self.assertTrue((target / "lantern-field-desk-router" / "references" / "terms.md").is_file())
+            self.assertTrue((target / "lantern-field-desk-intake-signal" / "SKILL.md").is_file())
+            self.assertTrue((target / "lantern-field-desk" / "SKILL.md").is_file())
+            fail = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(fail.returncode, 2)
+            force = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--force", "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(force.returncode, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

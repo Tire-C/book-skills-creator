@@ -15,6 +15,11 @@ from .pack import check_slug, linked_within, render_files
 HEX = re.compile(r"^[0-9a-f]{64}$")
 FRONTMATTER = re.compile(r'^---\nname: ([a-z0-9-]+)\ndescription: ("(?:[^"\\]|\\.)*")\n---\n\n', re.S)
 CASES = {"positive", "negative", "combo", "reference", "ambiguous", "unsupported"}
+SECRET_PATTERNS = re.compile(
+    r"(?:ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
+    r"sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|BEGIN[A-Z ]*PRIVATE KEY|"
+    r"xox[baprs]-[0-9]{10,}-[0-9]{10,}-[a-zA-Z0-9]{24,})"
+)
 
 
 def issue(items: list[dict], severity: str, code: str, location: str, detail: str = "") -> None:
@@ -93,6 +98,8 @@ def validate_plan(plan: dict, extraction: dict | None = None) -> list[dict]:
     if not isinstance(pack, dict):
         return issues + [{"severity": "ERROR", "code": "invalid-pack", "location": "pack.json", "detail": "pack"}]
     required_text(pack, ("name", "title", "description"), issues, "pack")
+    if len(str(pack.get("description", ""))) > 1024:
+        issue(issues, "ERROR", "description-too-long", "pack", f"description length {len(pack.get('description', ''))} exceeds 1024")
     name = pack.get("name", "")
     if not check_slug(name) or len(str(name) + "-router") > 64:
         issue(issues, "ERROR", "invalid-name", "pack", str(name))
@@ -120,6 +127,8 @@ def validate_plan(plan: dict, extraction: dict | None = None) -> list[dict]:
             issue(issues, "ERROR", "duplicate-source-path", path_value)
         if isinstance(path_value, str):
             source_paths.add(path_value)
+            if re.search(r"(/home/[^/]+|/Users/[^/]+|[a-zA-Z]:[/\\]Users[/\\])", path_value):
+                issue(issues, "WARNING", "local-user-path", str(sid), f"Source path contains unredacted local user directory: {path_value}")
         if not HEX.fullmatch(str(source.get("sha256", ""))) or not HEX.fullmatch(str(source.get("extracted_sha256", ""))):
             issue(issues, "ERROR", "invalid-hash", str(sid))
         if not isinstance(source.get("bytes"), int) or source["bytes"] < 0 or not is_strings(source.get("warnings")):
@@ -163,10 +172,14 @@ def validate_plan(plan: dict, extraction: dict | None = None) -> list[dict]:
             nodes.add(("reference" if kind == "references" else kind) + ":" + str(uid))
             if kind == "atomic":
                 required_text(unit, ("title", "description", "mission", "use_when", "output"), issues, location)
+                if len(str(unit.get("description", ""))) > 1024:
+                    issue(issues, "ERROR", "description-too-long", location, f"description length {len(unit.get('description', ''))} exceeds 1024")
                 required_list(unit, ("inputs", "steps", "evidence"), issues, location)
                 required_list(unit, ("constraints",), issues, location, False)
             elif kind == "combo":
                 required_text(unit, ("title", "description", "mission", "use_when", "output"), issues, location)
+                if len(str(unit.get("description", ""))) > 1024:
+                    issue(issues, "ERROR", "description-too-long", location, f"description length {len(unit.get('description', ''))} exceeds 1024")
                 required_list(unit, ("dependencies", "flow", "evidence"), issues, location)
                 if is_strings(unit.get("dependencies")) and len(unit["dependencies"]) < 2:
                     issue(issues, "ERROR", "combo-too-small", location)
@@ -300,6 +313,21 @@ def validate_plan(plan: dict, extraction: dict | None = None) -> list[dict]:
                     a, b = flow_step.casefold().strip(), atomic_step.casefold().strip()
                     if len(a) > 60 and len(b) > 60 and SequenceMatcher(None, a, b).ratio() > .85:
                         issue(issues, "WARNING", "combo-duplicates-atomic", str(combo.get("id")), str(atomic.get("id")))
+    def scan_secrets(data: object, loc: str) -> None:
+        if isinstance(data, str):
+            if SECRET_PATTERNS.search(data):
+                issue(issues, "ERROR", "credential-detected", loc, "Potential credential or secret detected")
+        elif isinstance(data, dict):
+            for k, v in data.items():
+                scan_secrets(v, f"{loc}.{k}")
+        elif isinstance(data, list):
+            for idx, item in enumerate(data):
+                scan_secrets(item, f"{loc}[{idx}]")
+
+    for section in ("pack", "candidates", "atomic", "combo", "routes", "references", "conflicts", "overlaps"):
+        if section in plan:
+            scan_secrets(plan[section], section)
+
     if extraction is not None:
         if any(item["severity"] == "ERROR" for item in issues):
             return issues
@@ -371,27 +399,42 @@ def validate_pack(root: Path, extraction: dict | None = None, legacy: bool = Fal
             continue
         if actual != content:
             issue(issues, "ERROR", "manifest-file-mismatch", relative)
+        if SECRET_PATTERNS.search(actual):
+            issue(issues, "ERROR", "credential-detected", relative, "Potential credential or secret detected")
         if relative.endswith("SKILL.md"):
             match = FRONTMATTER.match(actual)
             try:
-                valid_description = bool(match and json.loads(match.group(2)).strip())
+                desc_str = json.loads(match.group(2)) if match else ""
+                valid_description = bool(desc_str and desc_str.strip() and len(desc_str) <= 1024)
             except (ValueError, TypeError):
                 valid_description = False
             if not valid_description:
                 issue(issues, "ERROR", "invalid-frontmatter", relative)
-    for actual in root.rglob("*"):
-        relative = actual.relative_to(root).as_posix()
-        if is_link(actual):
-            issue(issues, "ERROR", "symlink-generated-file", relative)
-        elif actual.is_file() and relative not in expected and relative != "pack.json":
-            issue(issues, "ERROR", "unlisted-skill" if actual.name == "SKILL.md" else "unlisted-generated-file", relative)
-    for relative, content in expected.items():
-        for destination in re.findall(r"\[[^\]]+\]\(([^)]+)\)", content):
-            if destination.startswith(("http:", "https:", "mailto:", "#")):
+        for destination in re.findall(r"\[[^\]]+\]\(([^)]*)\)", actual):
+            dest_clean = destination.strip()
+            if not dest_clean:
+                issue(issues, "ERROR", "broken-reference-link", relative, "empty link destination")
                 continue
-            target = (root / relative).parent / destination.split("#", 1)[0]
-            if not target.resolve().is_relative_to(root.resolve()) or not target.exists():
-                issue(issues, "ERROR", "broken-reference-link", relative, destination)
+            if dest_clean.startswith(("http:", "https:", "mailto:", "#")):
+                continue
+            target_path_part = dest_clean.split("#", 1)[0].split("?", 1)[0]
+            if not target_path_part:
+                continue
+            link_target = (root / relative).parent / target_path_part
+            try:
+                if not link_target.resolve().is_relative_to(root.resolve()) or not link_target.exists():
+                    issue(issues, "ERROR", "broken-reference-link", relative, dest_clean)
+            except (ValueError, OSError):
+                issue(issues, "ERROR", "broken-reference-link", relative, dest_clean)
+    for actual_file in root.rglob("*"):
+        relative = actual_file.relative_to(root).as_posix()
+        if is_link(actual_file):
+            issue(issues, "ERROR", "symlink-generated-file", relative)
+        elif actual_file.is_file() and relative not in expected and relative != "pack.json":
+            issue(issues, "ERROR", "unlisted-skill" if actual_file.name == "SKILL.md" else "unlisted-generated-file", relative)
+    for relative, content in expected.items():
+        if SECRET_PATTERNS.search(content):
+            issue(issues, "ERROR", "credential-detected", relative, "Potential credential or secret detected")
     if extraction:
         compare_verbatim(expected, extraction, issues)
     return report(issues, plan)

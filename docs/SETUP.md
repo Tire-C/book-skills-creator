@@ -1,6 +1,6 @@
 # Setup
 
-Use Python 3.10 or newer. The core has no mandatory third-party dependencies. Clone this repository into a skills directory recognized by your agent environment, or invoke `scripts/book_skills.py` from the repository checkout. `SKILL.md` is the agent-facing workflow; the Python CLI is local and provider-neutral.
+Use Python 3.10 or newer. The core has no mandatory third-party dependencies. Install locally with `pip install -e .` to get the `book-skills` command, clone this repository into a skills directory recognized by your agent environment, or invoke `scripts/book_skills.py` from the repository checkout. `SKILL.md` is the agent-facing workflow; the Python CLI is local and provider-neutral.
 
 ```bash
 python scripts/book_skills.py preflight --json

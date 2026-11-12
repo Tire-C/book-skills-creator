@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .discovery import Limits, discover, label
 from .extraction import extract_selected, public_metadata, write_extraction
-from .pack import build, draft_plan, dump_json, load_json
+from .pack import build, draft_plan, dump_json, install_pack, load_json
 from .validation import report, validate_extraction, validate_pack, validate_plan
 
 
@@ -141,6 +141,17 @@ def update_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def install_command(args: argparse.Namespace) -> int:
+    result = install_pack(args.pack, args.target, mode=args.mode, force=args.force)
+    if args.json:
+        print_result(result, True)
+    else:
+        print(f"Installed pack '{result['pack']}' ({len(result['installed_skills'])} units) into {result['target']}:")
+        for skill in result["installed_skills"]:
+            print(f"- {skill}")
+    return 0
+
+
 def preflight(args: argparse.Namespace) -> int:
     data = {"python": ".".join(map(str, sys.version_info[:3])), "supported": sys.version_info >= (3, 10),
             "built_in": ["TXT", "Markdown", "DOCX", "HTML", "EPUB"],
@@ -176,6 +187,7 @@ def parser() -> argparse.ArgumentParser:
     p = sub.add_parser("build"); p.add_argument("plan", type=Path); p.add_argument("--output", type=Path, required=True); p.add_argument("--force", action="store_true"); common(p); p.set_defaults(func=build_command)
     p = sub.add_parser("validate"); p.add_argument("pack", type=Path); p.add_argument("--extraction", type=Path, help="Fresh sources.json; check changed, added, and removed source evidence"); p.add_argument("--legacy", action="store_true", help="Check a v1 Markdown-only pack with limited guarantees"); common(p); p.set_defaults(func=validate_command)
     p = sub.add_parser("update"); p.add_argument("pack", type=Path); p.add_argument("extraction", type=Path, help="Fresh sources.json to compare with pack.json"); p.add_argument("--output", type=Path); common(p); p.set_defaults(func=update_command)
+    p = sub.add_parser("install"); p.add_argument("pack", type=Path, help="Path to built pack directory"); p.add_argument("--target", type=Path, required=True, help="Destination agent skills directory"); p.add_argument("--mode", choices=["copy", "symlink"], default="copy", help="Installation mode (default: copy)"); p.add_argument("--force", action="store_true", help="Overwrite existing destination skill directories"); common(p); p.set_defaults(func=install_command)
     return root
 
 

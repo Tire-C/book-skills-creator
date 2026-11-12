@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 
 from .discovery import is_link
@@ -127,7 +128,7 @@ def render_files(plan: dict) -> dict[str, str]:
     map_lines.extend(f"- {item}\n" for item in plan["uncertainties"])
     map_lines.extend(f"- Validation risk: {item}\n" for item in plan["validation_risks"])
     files["skill_map.md"] = "".join(map_lines)
-    files["validation.md"] = "# Validation\n\nRun `python scripts/check_pack.py <pack-path> --json` for the current deterministic report. Review semantic grounding, overlap, conflicts, and behavioral cases separately.\n"
+    files["validation.md"] = "# Validation\n\nRun `book-skills validate <pack-path> --json` (or `python scripts/book_skills.py validate <pack-path> --json`) for the current deterministic report. Review semantic grounding, overlap, conflicts, and behavioral cases separately.\n"
     return files
 
 
@@ -151,3 +152,62 @@ def build(plan: dict, output: Path, overwrite: bool = False) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
     (output / "pack.json").write_text(dump_json(plan), encoding="utf-8")
+
+
+def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bool = False) -> dict:
+    from .validation import validate_pack
+    validation = validate_pack(pack_dir)
+    if validation["errors"] > 0:
+        raise ValueError(f"cannot-install-invalid-pack: {validation['errors']} errors found during validation")
+    plan = load_json(pack_dir / "pack.json")
+    pack_name = plan["pack"]["name"]
+    target_dir.mkdir(parents=True, exist_ok=True)
+    installed: list[str] = []
+
+    def place_skill(skill_name: str, skill_content: str, references_dir: Path | None) -> Path:
+        dest = target_dir / skill_name
+        if dest.exists():
+            if not force:
+                raise ValueError(f"target-exists: {dest.name}; use --force to overwrite")
+            shutil.rmtree(dest)
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "SKILL.md").write_text(skill_content, encoding="utf-8")
+        if references_dir and references_dir.is_dir():
+            ref_dest = dest / "references"
+            if mode == "symlink":
+                try:
+                    ref_dest.symlink_to(references_dir.resolve(), target_is_directory=True)
+                except (OSError, NotImplementedError):
+                    shutil.copytree(references_dir, ref_dest)
+            else:
+                shutil.copytree(references_dir, ref_dest)
+        return dest
+
+    ref_dir = pack_dir / "references"
+
+    router_skill = (pack_dir / "router" / "SKILL.md").read_text(encoding="utf-8")
+    place_skill(f"{pack_name}-router", router_skill, ref_dir)
+    installed.append(f"{pack_name}-router")
+
+    for unit in plan.get("atomic", []):
+        uid = unit["id"]
+        atomic_skill = (pack_dir / "atomic" / uid / "SKILL.md").read_text(encoding="utf-8")
+        place_skill(f"{pack_name}-{uid}", atomic_skill, ref_dir)
+        installed.append(f"{pack_name}-{uid}")
+
+    for unit in plan.get("combo", []):
+        uid = unit["id"]
+        combo_skill = (pack_dir / "combo" / uid / "SKILL.md").read_text(encoding="utf-8")
+        place_skill(f"{pack_name}-{uid}", combo_skill, ref_dir)
+        installed.append(f"{pack_name}-{uid}")
+
+    bundle_dest = target_dir / pack_name
+    if bundle_dest.exists():
+        if not force:
+            raise ValueError(f"target-exists: {bundle_dest.name}; use --force to overwrite")
+        shutil.rmtree(bundle_dest)
+    shutil.copytree(pack_dir, bundle_dest)
+    (bundle_dest / "SKILL.md").write_text(router_skill, encoding="utf-8")
+    installed.append(pack_name)
+
+    return {"status": "INSTALLED", "pack": pack_name, "target": str(target_dir), "mode": mode, "installed_skills": installed}

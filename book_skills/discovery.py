@@ -5,6 +5,7 @@ from __future__ import annotations
 import glob
 import itertools
 import os
+import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,10 +42,17 @@ def within(path: Path, directory: Path) -> bool:
 
 
 def label(path: Path) -> str:
+    """Return a portable, privacy-preserving POSIX label for a path."""
     try:
-        return path.absolute().relative_to(Path.cwd()).as_posix()
-    except ValueError:
-        return path.absolute().as_posix()
+        return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except (ValueError, OSError):
+        pass
+    try:
+        return ("~/" + path.resolve().relative_to(Path.home().resolve()).as_posix())
+    except (ValueError, OSError):
+        pass
+    posix = path.resolve().as_posix()
+    return re.sub(r"^[a-zA-Z]:", "", posix)
 
 
 def is_link(path: Path) -> bool:

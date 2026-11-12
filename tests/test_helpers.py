@@ -315,6 +315,17 @@ class CheckPackTests(unittest.TestCase):
             self.assertIn("symlink-generated-file", result.stdout)
 
 
+class InstallPackScriptTests(unittest.TestCase):
+    def test_install_script_runs_successfully(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "installed"
+            result = run_script("install_pack.py", REPO_ROOT / "examples" / "sample-pack", "--target", target, "--json")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["status"], "INSTALLED")
+            self.assertTrue((target / "lantern-field-desk-router" / "SKILL.md").is_file())
+
+
 class RepositoryQualityTests(unittest.TestCase):
     def test_preflight_reports_runtime_and_builtin_formats(self) -> None:
         result = run_script("preflight.py")
