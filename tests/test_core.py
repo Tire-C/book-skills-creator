@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 from book_skills.discovery import Limits, discover, label  # noqa: E402
 from book_skills.extraction import extract_file, extract_selected, write_extraction  # noqa: E402
-from book_skills.pack import build, draft_plan, dump_json, slugify  # noqa: E402
+from book_skills.pack import build, draft_plan, dump_json, install_pack, slugify  # noqa: E402
 from book_skills.validation import validate_pack, validate_plan  # noqa: E402
 from examples.build_sample import make_plan  # noqa: E402
 
@@ -581,6 +581,103 @@ class HardeningTests(unittest.TestCase):
             self.assertIn("target-has-unmanaged-files", force_run.stdout + force_run.stderr)
             self.assertTrue(foreign_file.is_file())
             self.assertEqual(foreign_file.read_text(encoding="utf-8"), "Private personal notes")
+
+    def test_install_force_refuses_to_delete_unmanaged_files_and_directories_in_references(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+
+            # 1. Foreign file inside router references
+            foreign_ref_file = target / "lantern-field-desk-router" / "references" / "foreign_ref.txt"
+            foreign_ref_file.write_text("Private reference note", encoding="utf-8")
+
+            # 2. Foreign directory inside router references with nested file
+            foreign_ref_dir = target / "lantern-field-desk-router" / "references" / "custom_sub"
+            foreign_ref_dir.mkdir()
+            foreign_nested = foreign_ref_dir / "nested.txt"
+            foreign_nested.write_text("Nested private info", encoding="utf-8")
+
+            # 3. Foreign directory inside bundle references
+            foreign_bundle_dir = target / "lantern-field-desk" / "references" / "bundle_sub"
+            foreign_bundle_dir.mkdir()
+
+            force_run = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--force", "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(force_run.returncode, 2)
+            self.assertIn("target-has-unmanaged-files", force_run.stdout + force_run.stderr)
+
+            # Verify every unmanaged file and directory was completely preserved
+            self.assertTrue(foreign_ref_file.is_file())
+            self.assertEqual(foreign_ref_file.read_text(encoding="utf-8"), "Private reference note")
+            self.assertTrue(foreign_ref_dir.is_dir())
+            self.assertTrue(foreign_nested.is_file())
+            self.assertEqual(foreign_nested.read_text(encoding="utf-8"), "Nested private info")
+            self.assertTrue(foreign_bundle_dir.is_dir())
+
+    def test_install_rollback_on_simulated_failure_during_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            # First clean install
+            result = install_pack(pack, target, force=False)
+            self.assertEqual(result["status"], "INSTALLED")
+
+            # Place identifying markers into pre-existing skills
+            router_file = target / "lantern-field-desk-router" / "SKILL.md"
+            signal_file = target / "lantern-field-desk-intake-signal" / "SKILL.md"
+            bundle_file = target / "lantern-field-desk" / "SKILL.md"
+            router_file.write_text("V1 PRE-EXISTING ROUTER CONTENT", encoding="utf-8")
+            signal_file.write_text("V1 PRE-EXISTING SIGNAL CONTENT", encoding="utf-8")
+            bundle_file.write_text("V1 PRE-EXISTING BUNDLE CONTENT", encoding="utf-8")
+
+            real_copytree = shutil.copytree
+            def failing_copytree(src, dst, *args, **kwargs):
+                if Path(dst).name == "lantern-field-desk-intake-signal":
+                    raise RuntimeError("Simulated failure after first replacement")
+                return real_copytree(src, dst, *args, **kwargs)
+
+            with patch("shutil.copytree", side_effect=failing_copytree):
+                with self.assertRaises(RuntimeError) as cm:
+                    install_pack(pack, target, force=True)
+                self.assertIn("Simulated failure after first replacement", str(cm.exception))
+
+            # Verify complete rollback: all pre-existing skills preserved with their exact content
+            self.assertEqual(router_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING ROUTER CONTENT")
+            self.assertEqual(signal_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING SIGNAL CONTENT")
+            self.assertEqual(bundle_file.read_text(encoding="utf-8"), "V1 PRE-EXISTING BUNDLE CONTENT")
+            # Verify no temporary backup directories remain in target
+            backups = [p.name for p in target.iterdir() if p.name.startswith(".install_backup_")]
+            self.assertEqual(backups, [])
+
+    def test_install_rollback_on_simulated_failure_during_fresh_install(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+
+            real_copytree = shutil.copytree
+            def failing_copytree(src, dst, *args, **kwargs):
+                if Path(dst).name == "lantern-field-desk-intake-signal":
+                    raise RuntimeError("Simulated failure after first replacement")
+                return real_copytree(src, dst, *args, **kwargs)
+
+            with patch("shutil.copytree", side_effect=failing_copytree):
+                with self.assertRaises(RuntimeError):
+                    install_pack(pack, target, force=False)
+
+            # Verify no partially installed skill directories remain in target
+            self.assertFalse((target / "lantern-field-desk-router").exists())
+            self.assertFalse((target / "lantern-field-desk-intake-signal").exists())
+            self.assertFalse((target / "lantern-field-desk").exists())
+            backups = [p.name for p in target.iterdir() if p.name.startswith(".install_backup_")]
+            self.assertEqual(backups, [])
 
     def test_install_transactional_preflight_no_partial_install(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

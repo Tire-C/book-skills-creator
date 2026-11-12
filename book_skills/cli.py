@@ -195,8 +195,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         return args.func(args)
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        detail = str(exc) if isinstance(exc, ValueError) else exc.__class__.__name__
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+        detail = str(exc) if isinstance(exc, (ValueError, RuntimeError)) else exc.__class__.__name__
         if args.json:
             print_result(report([{"severity": "ERROR", "code": "input-error", "location": "cli", "detail": detail}]), True)
         else:

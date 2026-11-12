@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -61,6 +62,30 @@ def linked_within(root: Path, target: Path) -> bool:
         if cursor == root:
             return False
         cursor = cursor.parent
+
+
+def _safe_remove(path: Path) -> None:
+    if is_link(path):
+        try:
+            path.unlink()
+        except OSError:
+            try:
+                os.unlink(str(path))
+            except OSError:
+                pass
+    elif path.is_dir():
+        def on_err(func, p, exc_info):
+            try:
+                os.chmod(p, 0o777)
+                func(p)
+            except OSError:
+                pass
+        shutil.rmtree(path, onerror=on_err)
+    elif path.exists():
+        try:
+            path.unlink()
+        except OSError:
+            pass
 
 
 def frontmatter(name: str, description: str) -> str:
@@ -168,24 +193,65 @@ def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bo
     combo_names = [f"{pack_name}-{u['id']}" for u in plan.get("combo", [])]
     all_skill_dirs = [f"{pack_name}-router", *atomic_names, *combo_names, pack_name]
 
-    # Preflight check: prevent partial install and protect foreign unmanaged files
+    ref_dir = pack_dir / "references"
+
+    # Preflight check: prevent partial install and protect foreign unmanaged files and directories
     conflicts: list[str] = []
     for s_name in all_skill_dirs:
         dest = target_dir / s_name
-        if dest.exists():
+        if dest.exists() or is_link(dest):
             conflicts.append(s_name)
             if is_link(dest):
                 raise ValueError(f"symlink-target: {s_name}")
             if force:
                 if s_name == pack_name:
-                    expected_managed = set(render_files(plan)) | {"pack.json", "SKILL.md"}
-                    stale = [p for p in dest.rglob("*") if p.is_file() and p.relative_to(dest).as_posix() not in expected_managed]
-                    if stale:
-                        raise ValueError(f"target-has-unmanaged-files: {s_name} contains foreign files; refusing to delete with --force")
+                    expected_files = {p.relative_to(pack_dir).as_posix() for p in pack_dir.rglob("*") if p.is_file()} | {"pack.json", "SKILL.md"} | set(render_files(plan))
+                    expected_dirs = {p.relative_to(pack_dir).as_posix() for p in pack_dir.rglob("*") if p.is_dir()}
                 else:
-                    stale = [p for p in dest.rglob("*") if p.is_file() and p.name != "SKILL.md" and "references" not in p.parts]
-                    if stale:
-                        raise ValueError(f"target-has-unmanaged-files: {s_name} contains foreign files; refusing to delete with --force")
+                    expected_files = {"SKILL.md"}
+                    expected_dirs = set()
+                    if ref_dir.is_dir():
+                        expected_dirs.add("references")
+                        for p in ref_dir.rglob("*"):
+                            rel_ref = f"references/{p.relative_to(ref_dir).as_posix()}"
+                            if p.is_file():
+                                expected_files.add(rel_ref)
+                            elif p.is_dir():
+                                expected_dirs.add(rel_ref)
+
+                for f_rel in list(expected_files):
+                    cur = Path(f_rel).parent
+                    while cur != Path("."):
+                        expected_dirs.add(cur.as_posix())
+                        cur = cur.parent
+
+                unmanaged: list[str] = []
+                for p in dest.rglob("*"):
+                    rel = p.relative_to(dest).as_posix()
+                    if is_link(p):
+                        if s_name != pack_name and rel == "references":
+                            try:
+                                raw_target = os.readlink(str(p))
+                                expected_rel = (Path("..") / pack_name / "references").as_posix()
+                                if Path(raw_target).as_posix() != expected_rel:
+                                    try:
+                                        if Path(raw_target).resolve() != (dest.parent / pack_name / "references").resolve():
+                                            unmanaged.append(f"{rel} -> {raw_target}")
+                                    except OSError:
+                                        unmanaged.append(f"{rel} -> {raw_target}")
+                            except OSError:
+                                unmanaged.append(rel)
+                        else:
+                            unmanaged.append(rel)
+                    elif p.is_file():
+                        if rel not in expected_files:
+                            unmanaged.append(rel)
+                    elif p.is_dir():
+                        if rel not in expected_dirs:
+                            unmanaged.append(rel)
+
+                if unmanaged:
+                    raise ValueError(f"target-has-unmanaged-files: {s_name} contains foreign files or directories; refusing to delete with --force")
 
     if conflicts and not force:
         raise ValueError(f"target-exists: {', '.join(sorted(conflicts))}; use --force to overwrite")
@@ -193,7 +259,6 @@ def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bo
     # Transactional staging: build everything in a temporary directory first
     with tempfile.TemporaryDirectory() as staging_tmp:
         staging_root = Path(staging_tmp)
-        ref_dir = pack_dir / "references"
 
         # 1. Stage bundle first so relative symlinks have a destination target
         bundle_dest = staging_root / pack_name
@@ -226,36 +291,58 @@ def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bo
             combo_skill = (pack_dir / "combo" / uid / "SKILL.md").read_text(encoding="utf-8")
             place_skill(f"{pack_name}-{uid}", combo_skill, ref_dir)
 
-        # 5. Atomic commit from staging to target_dir
+        # 5. Atomic commit from staging to target_dir with full transactional rollback
         installed: list[str] = []
-        for s_name in all_skill_dirs:
-            src = staging_root / s_name
-            dest = target_dir / s_name
-            if dest.exists():
-                shutil.rmtree(dest)
-            shutil.copytree(src, dest)
-            installed.append(s_name)
-
-        # 6. If symlink mode, wire relative symlinks directly in target_dir with fallback
-        if mode == "symlink" and ref_dir and ref_dir.is_dir():
+        backed_up: list[str] = []
+        placed_new: list[str] = []
+        backup_tmp = tempfile.TemporaryDirectory(dir=target_dir, prefix=".install_backup_")
+        try:
+            backup_root = Path(backup_tmp.name)
+            # Step A: back up any existing destination directories
             for s_name in all_skill_dirs:
-                if s_name == pack_name:
-                    continue
-                ref_dest = target_dir / s_name / "references"
-                rel_target = Path("..") / pack_name / "references"
-                try:
-                    ref_dest.symlink_to(rel_target, target_is_directory=True)
-                    if not ref_dest.is_dir():
-                        raise OSError("Symlink is not a directory")
-                except (OSError, NotImplementedError):
-                    if ref_dest.is_symlink() or ref_dest.exists():
-                        try:
-                            ref_dest.unlink()
-                        except OSError:
-                            try:
-                                ref_dest.rmdir()
-                            except OSError:
-                                pass
-                    shutil.copytree(ref_dir, ref_dest)
+                dest = target_dir / s_name
+                if dest.exists() or is_link(dest):
+                    b_dest = backup_root / s_name
+                    shutil.move(str(dest), str(b_dest))
+                    backed_up.append(s_name)
+
+            # Step B: copy staged skills into target_dir
+            for s_name in all_skill_dirs:
+                src = staging_root / s_name
+                dest = target_dir / s_name
+                shutil.copytree(src, dest)
+                placed_new.append(s_name)
+                installed.append(s_name)
+
+            # Step C: if symlink mode, wire relative symlinks directly in target_dir with fallback
+            if mode == "symlink" and ref_dir and ref_dir.is_dir():
+                for s_name in all_skill_dirs:
+                    if s_name == pack_name:
+                        continue
+                    ref_dest = target_dir / s_name / "references"
+                    rel_target = Path("..") / pack_name / "references"
+                    try:
+                        ref_dest.symlink_to(rel_target, target_is_directory=True)
+                        if not ref_dest.is_dir():
+                            raise OSError("Symlink is not a directory")
+                    except (OSError, NotImplementedError):
+                        _safe_remove(ref_dest)
+                        shutil.copytree(ref_dir, ref_dest)
+        except BaseException:
+            # Full rollback on any failure
+            for s_name in placed_new:
+                _safe_remove(target_dir / s_name)
+            for s_name in backed_up:
+                b_src = backup_root / s_name
+                dest = target_dir / s_name
+                if b_src.exists() or is_link(b_src):
+                    _safe_remove(dest)
+                    shutil.move(str(b_src), str(dest))
+            raise
+        finally:
+            try:
+                backup_tmp.cleanup()
+            except OSError:
+                pass
 
     return {"status": "INSTALLED", "pack": pack_name, "target": str(target_dir), "mode": mode, "installed_skills": installed}
