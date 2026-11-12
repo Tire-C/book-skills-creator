@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import tempfile
 from pathlib import Path
 
 from .discovery import is_link
@@ -162,52 +163,85 @@ def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bo
     plan = load_json(pack_dir / "pack.json")
     pack_name = plan["pack"]["name"]
     target_dir.mkdir(parents=True, exist_ok=True)
-    installed: list[str] = []
 
-    def place_skill(skill_name: str, skill_content: str, references_dir: Path | None) -> Path:
-        dest = target_dir / skill_name
+    atomic_names = [f"{pack_name}-{u['id']}" for u in plan.get("atomic", [])]
+    combo_names = [f"{pack_name}-{u['id']}" for u in plan.get("combo", [])]
+    all_skill_dirs = [f"{pack_name}-router", *atomic_names, *combo_names, pack_name]
+
+    # Preflight check: prevent partial install and protect foreign unmanaged files
+    conflicts: list[str] = []
+    for s_name in all_skill_dirs:
+        dest = target_dir / s_name
         if dest.exists():
-            if not force:
-                raise ValueError(f"target-exists: {dest.name}; use --force to overwrite")
-            shutil.rmtree(dest)
-        dest.mkdir(parents=True, exist_ok=True)
-        (dest / "SKILL.md").write_text(skill_content, encoding="utf-8")
-        if references_dir and references_dir.is_dir():
-            ref_dest = dest / "references"
-            if mode == "symlink":
-                try:
-                    ref_dest.symlink_to(references_dir.resolve(), target_is_directory=True)
-                except (OSError, NotImplementedError):
+            conflicts.append(s_name)
+            if is_link(dest):
+                raise ValueError(f"symlink-target: {s_name}")
+            if force:
+                if s_name == pack_name:
+                    expected_managed = set(render_files(plan)) | {"pack.json", "SKILL.md"}
+                    stale = [p for p in dest.rglob("*") if p.is_file() and p.relative_to(dest).as_posix() not in expected_managed]
+                    if stale:
+                        raise ValueError(f"target-has-unmanaged-files: {s_name} contains foreign files; refusing to delete with --force")
+                else:
+                    stale = [p for p in dest.rglob("*") if p.is_file() and p.name != "SKILL.md" and "references" not in p.parts]
+                    if stale:
+                        raise ValueError(f"target-has-unmanaged-files: {s_name} contains foreign files; refusing to delete with --force")
+
+    if conflicts and not force:
+        raise ValueError(f"target-exists: {', '.join(sorted(conflicts))}; use --force to overwrite")
+
+    # Transactional staging: build everything in a temporary directory first
+    with tempfile.TemporaryDirectory() as staging_tmp:
+        staging_root = Path(staging_tmp)
+        ref_dir = pack_dir / "references"
+
+        # 1. Stage bundle first so relative symlinks have a destination target
+        bundle_dest = staging_root / pack_name
+        shutil.copytree(pack_dir, bundle_dest)
+        bundle_desc = plan["pack"].get("description") or f"Route requests to capabilities in {plan['pack']['title']}."
+        bundle_frontmatter = frontmatter(pack_name, bundle_desc)
+        router_skill = (pack_dir / "router" / "SKILL.md").read_text(encoding="utf-8")
+        body = router_skill.split("---\n\n", 1)[1] if "---\n\n" in router_skill else router_skill
+        (bundle_dest / "SKILL.md").write_text(bundle_frontmatter + body, encoding="utf-8")
+
+        def place_skill(skill_name: str, skill_content: str, references_dir: Path | None) -> None:
+            dest = staging_root / skill_name
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / "SKILL.md").write_text(skill_content, encoding="utf-8")
+            if references_dir and references_dir.is_dir():
+                ref_dest = dest / "references"
+                if mode == "symlink":
+                    rel_target = Path("..") / pack_name / "references"
+                    try:
+                        ref_dest.symlink_to(rel_target, target_is_directory=True)
+                    except (OSError, NotImplementedError):
+                        shutil.copytree(references_dir, ref_dest)
+                else:
                     shutil.copytree(references_dir, ref_dest)
-            else:
-                shutil.copytree(references_dir, ref_dest)
-        return dest
 
-    ref_dir = pack_dir / "references"
+        # 2. Stage router
+        place_skill(f"{pack_name}-router", router_skill, ref_dir)
 
-    router_skill = (pack_dir / "router" / "SKILL.md").read_text(encoding="utf-8")
-    place_skill(f"{pack_name}-router", router_skill, ref_dir)
-    installed.append(f"{pack_name}-router")
+        # 3. Stage atomic skills
+        for unit in plan.get("atomic", []):
+            uid = unit["id"]
+            atomic_skill = (pack_dir / "atomic" / uid / "SKILL.md").read_text(encoding="utf-8")
+            place_skill(f"{pack_name}-{uid}", atomic_skill, ref_dir)
 
-    for unit in plan.get("atomic", []):
-        uid = unit["id"]
-        atomic_skill = (pack_dir / "atomic" / uid / "SKILL.md").read_text(encoding="utf-8")
-        place_skill(f"{pack_name}-{uid}", atomic_skill, ref_dir)
-        installed.append(f"{pack_name}-{uid}")
+        # 4. Stage combo skills
+        for unit in plan.get("combo", []):
+            uid = unit["id"]
+            combo_skill = (pack_dir / "combo" / uid / "SKILL.md").read_text(encoding="utf-8")
+            place_skill(f"{pack_name}-{uid}", combo_skill, ref_dir)
 
-    for unit in plan.get("combo", []):
-        uid = unit["id"]
-        combo_skill = (pack_dir / "combo" / uid / "SKILL.md").read_text(encoding="utf-8")
-        place_skill(f"{pack_name}-{uid}", combo_skill, ref_dir)
-        installed.append(f"{pack_name}-{uid}")
-
-    bundle_dest = target_dir / pack_name
-    if bundle_dest.exists():
-        if not force:
-            raise ValueError(f"target-exists: {bundle_dest.name}; use --force to overwrite")
-        shutil.rmtree(bundle_dest)
-    shutil.copytree(pack_dir, bundle_dest)
-    (bundle_dest / "SKILL.md").write_text(router_skill, encoding="utf-8")
-    installed.append(pack_name)
+        # 5. Atomic commit from staging to target_dir
+        installed: list[str] = []
+        for s_name in all_skill_dirs:
+            src = staging_root / s_name
+            dest = target_dir / s_name
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(src, dest, symlinks=True)
+            installed.append(s_name)
 
     return {"status": "INSTALLED", "pack": pack_name, "target": str(target_dir), "mode": mode, "installed_skills": installed}

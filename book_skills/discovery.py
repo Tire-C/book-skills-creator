@@ -43,16 +43,37 @@ def within(path: Path, directory: Path) -> bool:
 
 def label(path: Path) -> str:
     """Return a portable, privacy-preserving POSIX label for a path."""
+    posix_raw = path.as_posix()
+    if re.match(r"^[a-zA-Z]:", posix_raw):
+        posix = re.sub(r"^[a-zA-Z]:", "", posix_raw)
+        posix = re.sub(r"^/(?:Users|home)/[^/]+(?=/|$)", "~", posix, flags=re.IGNORECASE)
+        current_user = os.environ.get("USER") or os.environ.get("USERNAME")
+        if current_user and len(current_user) > 2:
+            posix = re.sub(rf"(?<=[/\\]){re.escape(current_user)}(?=[/\\]|$)", "<user>", posix, flags=re.IGNORECASE)
+        return posix
+
     try:
-        return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
-    except (ValueError, OSError):
-        pass
-    try:
-        return ("~/" + path.resolve().relative_to(Path.home().resolve()).as_posix())
-    except (ValueError, OSError):
-        pass
-    posix = path.resolve().as_posix()
-    return re.sub(r"^[a-zA-Z]:", "", posix)
+        resolved = path.resolve()
+        cwd = Path.cwd().resolve()
+        try:
+            return resolved.relative_to(cwd).as_posix()
+        except (ValueError, OSError):
+            pass
+        home = Path.home().resolve()
+        try:
+            return ("~/" + resolved.relative_to(home).as_posix())
+        except (ValueError, OSError):
+            pass
+        posix = resolved.as_posix()
+    except OSError:
+        posix = posix_raw
+
+    posix = re.sub(r"^[a-zA-Z]:", "", posix)
+    posix = re.sub(r"^/(?:Users|home)/[^/]+(?=/|$)", "~", posix, flags=re.IGNORECASE)
+    current_user = os.environ.get("USER") or os.environ.get("USERNAME")
+    if current_user and len(current_user) > 2:
+        posix = re.sub(rf"(?<=[/\\]){re.escape(current_user)}(?=[/\\]|$)", "<user>", posix, flags=re.IGNORECASE)
+    return posix
 
 
 def is_link(path: Path) -> bool:

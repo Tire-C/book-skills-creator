@@ -237,7 +237,7 @@ python scripts/book_skills.py validate examples/sample-pack --json
 python scripts/check_pack.py examples/v1-sample-pack --legacy --json
 ```
 
-CI runs the suite and validation on **Ubuntu and Windows**, each with **Python 3.10 and 3.12**. The sample's unresolved source conflict is an intentional warning, not a passing claim of semantic resolution.
+CI runs the suite and validation on **Ubuntu, Windows, and macOS**, across **Python 3.10, 3.11, 3.12, and 3.13**. The sample's unresolved source conflict is an intentional warning, not a passing claim of semantic resolution.
 
 ### Contributing and responsible use
 

@@ -18,7 +18,10 @@ CASES = {"positive", "negative", "combo", "reference", "ambiguous", "unsupported
 SECRET_PATTERNS = re.compile(
     r"(?:ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
     r"sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|BEGIN[A-Z ]*PRIVATE KEY|"
-    r"xox[baprs]-[0-9]{10,}-[0-9]{10,}-[a-zA-Z0-9]{24,})"
+    r"xox[baprs]-[0-9]{10,}-[0-9]{10,}-[a-zA-Z0-9]{24,}|"
+    r"(?:bearer\s+[A-Za-z0-9_\-\.]{20,})|"
+    r"(?:api[_-]?key|access[_-]?token|auth[_-]?token)\s*[:=]\s*['\"][A-Za-z0-9_\-\.]{16,}['\"])",
+    re.IGNORECASE
 )
 
 
@@ -324,7 +327,7 @@ def validate_plan(plan: dict, extraction: dict | None = None) -> list[dict]:
             for idx, item in enumerate(data):
                 scan_secrets(item, f"{loc}[{idx}]")
 
-    for section in ("pack", "candidates", "atomic", "combo", "routes", "references", "conflicts", "overlaps"):
+    for section in ("pack", "sources", "evidence", "candidates", "atomic", "combo", "routes", "references", "conflicts", "overlaps"):
         if section in plan:
             scan_secrets(plan[section], section)
 

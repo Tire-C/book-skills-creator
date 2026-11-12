@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -17,7 +18,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from book_skills.discovery import Limits, discover  # noqa: E402
+from book_skills.discovery import Limits, discover, label  # noqa: E402
 from book_skills.extraction import extract_file, extract_selected, write_extraction  # noqa: E402
 from book_skills.pack import build, draft_plan, dump_json, slugify  # noqa: E402
 from book_skills.validation import validate_pack, validate_plan  # noqa: E402
@@ -546,6 +547,135 @@ class HardeningTests(unittest.TestCase):
             self.assertEqual(fail.returncode, 2)
             force = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--force", "--json"], capture_output=True, text=True, check=False)
             self.assertEqual(force.returncode, 0)
+
+    def test_bundle_frontmatter_matches_directory_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            bundle_text = (target / "lantern-field-desk" / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("name: lantern-field-desk\n", bundle_text)
+            self.assertNotIn("name: lantern-field-desk-router\n", bundle_text)
+            router_text = (target / "lantern-field-desk-router" / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("name: lantern-field-desk-router\n", router_text)
+
+    def test_install_force_refuses_to_delete_unmanaged_foreign_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+
+            foreign_file = target / "lantern-field-desk" / "user_notes.txt"
+            foreign_file.write_text("Private personal notes", encoding="utf-8")
+
+            force_run = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--force", "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(force_run.returncode, 2)
+            self.assertIn("target-has-unmanaged-files", force_run.stdout + force_run.stderr)
+            self.assertTrue(foreign_file.is_file())
+            self.assertEqual(foreign_file.read_text(encoding="utf-8"), "Private personal notes")
+
+    def test_install_transactional_preflight_no_partial_install(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            conflict_dir = target / "lantern-field-desk-intake-signal"
+            conflict_dir.mkdir(parents=True)
+            (conflict_dir / "SKILL.md").write_text("existing", encoding="utf-8")
+
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 2)
+            self.assertIn("target-exists", res.stdout + res.stderr)
+            self.assertFalse((target / "lantern-field-desk-router").exists())
+            self.assertFalse((target / "lantern-field-desk").exists())
+
+    def test_install_relative_symlinks_remain_valid_after_move(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--mode", "symlink", "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            ref_dir = target / "lantern-field-desk-router" / "references"
+            self.assertTrue(ref_dir.is_dir())
+            self.assertTrue((ref_dir / "terms.md").is_file())
+            moved_target = root / "moved_skills"
+            target.rename(moved_target)
+            moved_ref = moved_target / "lantern-field-desk-router" / "references" / "terms.md"
+            self.assertTrue(moved_ref.is_file())
+            self.assertIn("Desk terms", moved_ref.read_text(encoding="utf-8"))
+
+    def test_path_sanitization_and_secret_detection(self) -> None:
+        p1 = Path("/Users/SecretUser/documents/file.txt")
+        lbl1 = label(p1)
+        self.assertNotIn("SecretUser", lbl1)
+        self.assertTrue(lbl1.startswith("~") or "<user>" in lbl1)
+
+        p2 = Path("C:/Users/SecretUser/documents/file.txt")
+        lbl2 = label(p2)
+        self.assertFalse(lbl2.startswith("C:"))
+        self.assertNotIn("SecretUser", lbl2)
+
+        plan = copy.deepcopy(self.plan)
+        plan["sources"][0]["path"] = "/Users/SecretUser/private/doc.md"
+        issues = validate_plan(plan)
+        self.assertIn("local-user-path", codes(issues))
+
+        plan_sec = copy.deepcopy(self.plan)
+        plan_sec["sources"][0]["method"] = "bearer 1234567890123456789012345"
+        self.assertIn("credential-detected", codes(validate_plan(plan_sec)))
+
+        plan_key = copy.deepcopy(self.plan)
+        plan_key["atomic"][0]["mission"] = "api_key = 'abcdef1234567890abcdef'"
+        self.assertIn("credential-detected", codes(validate_plan(plan_key)))
+
+    def test_agent_skills_loader_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            build(self.plan, pack)
+            target = root / "skills"
+            cli = [sys.executable, str(ROOT / "scripts/book_skills.py")]
+            res = subprocess.run([*cli, "install", str(pack), "--target", str(target), "--json"], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0, res.stderr)
+
+            discovered_skills = [p for p in target.iterdir() if p.is_dir() and (p / "SKILL.md").is_file()]
+            self.assertGreaterEqual(len(discovered_skills), 3)
+
+            name_slug_re = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+            frontmatter_re = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+
+            for skill_dir in discovered_skills:
+                dir_name = skill_dir.name
+                self.assertLessEqual(len(dir_name), 64)
+                self.assertRegex(dir_name, name_slug_re)
+
+                content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+                match = frontmatter_re.match(content)
+                self.assertIsNotNone(match, f"Missing YAML frontmatter in {skill_dir}")
+
+                fm_text = match.group(1)
+                name_match = re.search(r"^name:\s*([^\s]+)", fm_text, re.MULTILINE)
+                self.assertIsNotNone(name_match, f"Missing name in {skill_dir}/SKILL.md")
+                self.assertEqual(name_match.group(1), dir_name, f"Frontmatter name must match directory name in {skill_dir}")
+
+                desc_match = re.search(r"^description:\s*(.+)", fm_text, re.MULTILINE)
+                self.assertIsNotNone(desc_match, f"Missing description in {skill_dir}/SKILL.md")
+                desc_val = json.loads(desc_match.group(1).strip())
+                self.assertTrue(len(desc_val) > 0)
+                self.assertLessEqual(len(desc_val), 1024)
 
 
 if __name__ == "__main__":
