@@ -214,7 +214,10 @@ def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bo
                     rel_target = Path("..") / pack_name / "references"
                     try:
                         ref_dest.symlink_to(rel_target, target_is_directory=True)
+                        ref_dest.stat()
                     except (OSError, NotImplementedError):
+                        if ref_dest.is_symlink() or ref_dest.exists():
+                            ref_dest.unlink(missing_ok=True)
                         shutil.copytree(references_dir, ref_dest)
                 else:
                     shutil.copytree(references_dir, ref_dest)
@@ -241,7 +244,12 @@ def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bo
             dest = target_dir / s_name
             if dest.exists():
                 shutil.rmtree(dest)
-            shutil.copytree(src, dest, symlinks=True)
+            try:
+                shutil.copytree(src, dest, symlinks=True)
+            except (OSError, NotImplementedError):
+                if dest.exists():
+                    shutil.rmtree(dest)
+                shutil.copytree(src, dest, symlinks=False)
             installed.append(s_name)
 
     return {"status": "INSTALLED", "pack": pack_name, "target": str(target_dir), "mode": mode, "installed_skills": installed}

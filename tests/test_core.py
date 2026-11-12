@@ -602,6 +602,15 @@ class HardeningTests(unittest.TestCase):
     def test_install_relative_symlinks_remain_valid_after_move(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            probe_target = root / "probe_target"
+            probe_target.mkdir()
+            probe_link = root / "probe_link"
+            try:
+                probe_link.symlink_to(probe_target, target_is_directory=True)
+                probe_link.stat()
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"Symbolic links are unavailable: {exc}")
+
             pack = root / "pack"
             build(self.plan, pack)
             target = root / "skills"
