@@ -208,19 +208,8 @@ def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bo
             dest = staging_root / skill_name
             dest.mkdir(parents=True, exist_ok=True)
             (dest / "SKILL.md").write_text(skill_content, encoding="utf-8")
-            if references_dir and references_dir.is_dir():
-                ref_dest = dest / "references"
-                if mode == "symlink":
-                    rel_target = Path("..") / pack_name / "references"
-                    try:
-                        ref_dest.symlink_to(rel_target, target_is_directory=True)
-                        ref_dest.stat()
-                    except (OSError, NotImplementedError):
-                        if ref_dest.is_symlink() or ref_dest.exists():
-                            ref_dest.unlink(missing_ok=True)
-                        shutil.copytree(references_dir, ref_dest)
-                else:
-                    shutil.copytree(references_dir, ref_dest)
+            if mode != "symlink" and references_dir and references_dir.is_dir():
+                shutil.copytree(references_dir, dest / "references")
 
         # 2. Stage router
         place_skill(f"{pack_name}-router", router_skill, ref_dir)
@@ -244,12 +233,29 @@ def install_pack(pack_dir: Path, target_dir: Path, mode: str = "copy", force: bo
             dest = target_dir / s_name
             if dest.exists():
                 shutil.rmtree(dest)
-            try:
-                shutil.copytree(src, dest, symlinks=True)
-            except (OSError, NotImplementedError):
-                if dest.exists():
-                    shutil.rmtree(dest)
-                shutil.copytree(src, dest, symlinks=False)
+            shutil.copytree(src, dest)
             installed.append(s_name)
+
+        # 6. If symlink mode, wire relative symlinks directly in target_dir with fallback
+        if mode == "symlink" and ref_dir and ref_dir.is_dir():
+            for s_name in all_skill_dirs:
+                if s_name == pack_name:
+                    continue
+                ref_dest = target_dir / s_name / "references"
+                rel_target = Path("..") / pack_name / "references"
+                try:
+                    ref_dest.symlink_to(rel_target, target_is_directory=True)
+                    if not ref_dest.is_dir():
+                        raise OSError("Symlink is not a directory")
+                except (OSError, NotImplementedError):
+                    if ref_dest.is_symlink() or ref_dest.exists():
+                        try:
+                            ref_dest.unlink()
+                        except OSError:
+                            try:
+                                ref_dest.rmdir()
+                            except OSError:
+                                pass
+                    shutil.copytree(ref_dir, ref_dest)
 
     return {"status": "INSTALLED", "pack": pack_name, "target": str(target_dir), "mode": mode, "installed_skills": installed}
